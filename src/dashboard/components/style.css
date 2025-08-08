@@ -1,0 +1,55 @@
+/* src/dashboard/components/style.css */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #0E1117;
+    color: #FAFAFA;
+}
+.main-header {
+    font-size: 2.5rem;
+    color: #4A90E2;
+    text-align: center;
+    padding: 1rem 0 2rem 0;
+}
+.metric-card {
+    background-color: #262730;
+    border: 1px solid #3c3f4a;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease-in-out;
+    height: 150px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.metric-card:hover {
+    box-shadow: 0 8px 12px rgba(0,0,0,0.2);
+    transform: translateY(-3px);
+    border-color: #4A90E2;
+}
+.metric-card h4 {
+    margin-bottom: 10px;
+    color: #a9aeb3;
+    font-size: 1rem;
+}
+.health-score-good { color: #28a745; font-size: 2.5rem; font-weight: bold; }
+.health-score-warning { color: #ffc107; font-size: 2.5rem; font-weight: bold; }
+.health-score-danger { color: #dc3545; font-size: 2.5rem; font-weight: bold; }
+.forecast-text, .sentiment-text, .price-text { font-size: 1.8rem; font-weight: bold; }
+.stTabs [data-baseweb="tab-list"] { gap: 24px; }
+.stTabs [data-baseweb="tab"] {
+	height: 50px;
+    white-space: pre-wrap;
+	background-color: transparent;
+	border-radius: 4px 4px 0px 0px;
+	padding: 10px;
+}
+.stTabs [aria-selected="true"] {
+  	background-color: #262730;
+	color: #4A90E2;
+	font-weight: bold;
+}
+div[data-testid="stSidebarUserContent"] {
+    background-color: #1a1c23;
+    padding: 15px;
+}

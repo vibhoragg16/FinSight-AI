@@ -1,0 +1,46 @@
+# Core & Data Science
+pandas
+numpy
+scikit-learn
+xgboost
+joblib
+
+# Data Collection
+yfinance
+sec-edgar-downloader
+requests
+newsapi-python
+# Technical Analysis library for market data
+ta
+
+# Document Processing & RAG
+langchain
+langchain-groq
+langchain-community
+pypdf
+pymupdf
+chromadb
+sentence-transformers
+# Vector store for RAG
+faiss-cpu
+# For Table Extraction from PDFs
+camelot-py[cv]
+opencv-python-headless
+
+# AI & NLP
+groq
+transformers
+torch
+# For sentence tokenization in some environments
+nltk
+
+# Dashboard
+streamlit
+plotly
+
+# Utilities
+python-dotenv
+schedule
+
+unstructured
+beautifulsoup4
