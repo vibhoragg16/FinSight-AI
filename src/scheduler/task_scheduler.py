@@ -4,16 +4,20 @@ import threading
 import logging
 import pandas as pd
 import os
+from datetime import datetime
 from src.utils.config import TARGET_COMPANIES, MARKET_DATA_PATH, NEWS_DATA_PATH, SCHEDULER_MARKET_DATA_HOURS, SCHEDULER_NEWS_DATA_HOURS, SCHEDULER_AI_ANALYSIS_HOURS, SCHEDULER_SEC_FILINGS_DAYS
 from src.data_collection import market_data, news, sec_filings
 from src.document_processing.parser import process_all_documents
 from src.alerting.alert_system import AlertSystem
 from src.ai_core.qualitative_brain import QualitativeBrain
 from src.ai_core.quantitative_brain import QuantitativeBrain
+from src.training.train import run_training_pipeline
+from src.utils.hf_utils import pull_data_from_hf, push_data_to_hf
 
 class TaskScheduler:
     """
     Automates the entire data pipeline with granular, multi-frequency tasks.
+    It syncs with Hugging Face Hub to work both locally and in the cloud.
     """
     def __init__(self):
         self.running = False
@@ -23,6 +27,38 @@ class TaskScheduler:
         self.quant_brain = QuantitativeBrain()
         self.latest_analysis = {}
 
+    def run_full_cycle(self):
+        """
+        Runs one full cycle of data collection, processing, and analysis,
+        ensuring data is synced with Hugging Face Hub.
+        """
+        try:
+            logging.info("CYCLE START: Pulling latest data from Hugging Face Hub...")
+            pull_data_from_hf()
+
+            logging.info("CYCLE STEP 1: Collecting new data...")
+            sec_filings.download_sec_filings(TARGET_COMPANIES, limit=2)
+            news.fetch_company_news(TARGET_COMPANIES)
+            market_data.fetch_market_data(TARGET_COMPANIES)
+            
+            logging.info("CYCLE STEP 2: Processing documents...")
+            process_all_documents()
+
+            logging.info("CYCLE STEP 3: Running analysis and checking alerts...")
+            self.run_ai_analysis()
+            self.check_alerts()
+            
+            logging.info("CYCLE STEP 4: Pushing updated data to Hugging Face Hub...")
+            commit_msg = f"Automated data update: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            push_data_to_hf(commit_message=commit_msg)
+
+            logging.info("CYCLE COMPLETE.")
+
+        except Exception as e:
+            logging.error(f"An error occurred during the scheduler cycle: {e}")
+
+
+    # --- Individual Tasks ---
     def update_market_data(self):
         logging.info("SCHEDULER: Updating market data...")
         market_data.fetch_market_data(TARGET_COMPANIES, period="1y")
@@ -48,7 +84,7 @@ class TaskScheduler:
             financials_df = pd.DataFrame() 
 
             news_sentiment = 0
-            if not news_df.empty:
+            if not news_df.empty and 'articles' in news_df:
                 articles = pd.json_normalize(news_df['articles'])
                 if not articles.empty:
                     news_sentiment = articles['title'].apply(lambda x: self.qual_brain.analyze_text_sentiment(str(x))).mean()
@@ -73,8 +109,20 @@ class TaskScheduler:
         logging.info("SCHEDULER: Sending daily alert summary...")
         self.alert_system.send_daily_summary()
 
+    def run_model_retraining(self):
+        """Triggers the automated retraining and promotion pipeline."""
+        logging.info("SCHEDULER: Kicking off monthly model retraining job...")
+        try:
+            run_training_pipeline()
+        except Exception as e:
+            logging.error(f"Automated model retraining failed: {e}")
+
     def _run_schedule(self):
+        """The actual scheduling loop to be run in a thread."""
         logging.info("Configuring granular schedule...")
+        
+        # Pull latest data before starting the schedule
+        pull_data_from_hf()
         
         schedule.every(SCHEDULER_MARKET_DATA_HOURS).hours.do(self.update_market_data)
         schedule.every(SCHEDULER_NEWS_DATA_HOURS).hours.do(self.update_news_data)
@@ -82,6 +130,12 @@ class TaskScheduler:
         schedule.every(SCHEDULER_AI_ANALYSIS_HOURS).hours.at(":30").do(self.check_alerts)
         schedule.every(SCHEDULER_SEC_FILINGS_DAYS).days.at("04:00").do(self.update_sec_filings)
         schedule.every().day.at("08:00").do(self.send_daily_summary)
+
+        schedule.every().month.at("01:00").do(self.run_model_retraining)
+        
+        # After tasks, push any changes
+        schedule.every(4).hours.do(lambda: push_data_to_hf(f"Automated hourly data sync: {datetime.now()}"))
+
 
         logging.info("Scheduler configured. Waiting for jobs...")
         while self.running:
