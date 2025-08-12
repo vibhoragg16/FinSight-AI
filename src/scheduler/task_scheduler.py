@@ -12,12 +12,11 @@ from src.alerting.alert_system import AlertSystem
 from src.ai_core.qualitative_brain import QualitativeBrain
 from src.ai_core.quantitative_brain import QuantitativeBrain
 from src.training.train import run_training_pipeline
-from src.utils.hf_utils import pull_data_from_hf, push_data_to_hf
 
 class TaskScheduler:
     """
     Automates the entire data pipeline with granular, multi-frequency tasks.
-    It syncs with Hugging Face Hub to work both locally and in the cloud.
+    It now works entirely with local data managed by Git LFS.
     """
     def __init__(self):
         self.running = False
@@ -29,12 +28,10 @@ class TaskScheduler:
 
     def run_full_cycle(self):
         """
-        Runs one full cycle of data collection, processing, and analysis,
-        ensuring data is synced with Hugging Face Hub.
+        Runs one full cycle of data collection, processing, and analysis.
         """
         try:
-            logging.info("CYCLE START: Pulling latest data from Hugging Face Hub...")
-            pull_data_from_hf()
+            logging.info("CYCLE START: Running a full data and analysis cycle...")
 
             logging.info("CYCLE STEP 1: Collecting new data...")
             sec_filings.download_sec_filings(TARGET_COMPANIES, limit=2)
@@ -48,11 +45,7 @@ class TaskScheduler:
             self.run_ai_analysis()
             self.check_alerts()
             
-            logging.info("CYCLE STEP 4: Pushing updated data to Hugging Face Hub...")
-            commit_msg = f"Automated data update: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-            push_data_to_hf(commit_message=commit_msg)
-
-            logging.info("CYCLE COMPLETE.")
+            logging.info("CYCLE COMPLETE. New data has been saved locally.")
 
         except Exception as e:
             logging.error(f"An error occurred during the scheduler cycle: {e}")
@@ -81,7 +74,7 @@ class TaskScheduler:
             market_df = pd.read_csv(market_file) if os.path.exists(market_file) else pd.DataFrame()
             news_df = pd.read_json(news_file) if os.path.exists(news_file) else pd.DataFrame()
             
-            financials_df = pd.DataFrame() 
+            financials_df = pd.DataFrame()
 
             news_sentiment = 0
             if not news_df.empty and 'articles' in news_df:
@@ -121,21 +114,13 @@ class TaskScheduler:
         """The actual scheduling loop to be run in a thread."""
         logging.info("Configuring granular schedule...")
         
-        # Pull latest data before starting the schedule
-        pull_data_from_hf()
-        
         schedule.every(SCHEDULER_MARKET_DATA_HOURS).hours.do(self.update_market_data)
         schedule.every(SCHEDULER_NEWS_DATA_HOURS).hours.do(self.update_news_data)
         schedule.every(SCHEDULER_AI_ANALYSIS_HOURS).hours.do(self.run_ai_analysis)
         schedule.every(SCHEDULER_AI_ANALYSIS_HOURS).hours.at(":30").do(self.check_alerts)
         schedule.every(SCHEDULER_SEC_FILINGS_DAYS).days.at("04:00").do(self.update_sec_filings)
         schedule.every().day.at("08:00").do(self.send_daily_summary)
-
         schedule.every().month.at("01:00").do(self.run_model_retraining)
-        
-        # After tasks, push any changes
-        schedule.every(4).hours.do(lambda: push_data_to_hf(f"Automated hourly data sync: {datetime.now()}"))
-
 
         logging.info("Scheduler configured. Waiting for jobs...")
         while self.running:
