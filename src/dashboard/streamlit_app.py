@@ -1,9 +1,8 @@
+# src/dashboard/streamlit_app.py
 import streamlit as st
 import pandas as pd
 import os
-import plotly.express as px
 import plotly.graph_objects as go
-import numpy as np
 import sys
 import logging
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
@@ -12,7 +11,6 @@ from src.utils.config import TARGET_COMPANIES, MARKET_DATA_PATH, NEWS_DATA_PATH
 from src.rag.query_processor import query_rag_system
 from src.ai_core.qualitative_brain import QualitativeBrain
 from src.ai_core.quantitative_brain import QuantitativeBrain
-from src.utils.hf_utils import pull_data_from_hf
 
 # --- Page Config ---
 st.set_page_config(page_title="FinSight AI", layout="wide", page_icon="💡")
@@ -33,23 +31,6 @@ def init_brains():
         st.error(f"Initialization Error: {e}. Please set your GROQ_API_KEY in the Streamlit secrets.")
         st.stop()
 
-# --- Data Sync with Hugging Face Hub ---
-@st.cache_resource(ttl=3600) # Sync data at most once per hour
-def sync_data_from_hf():
-    """Pulls the latest data from Hugging Face Hub."""
-    try:
-        logging.info("Syncing data from Hugging Face Hub for dashboard...")
-        pull_data_from_hf()
-        logging.info("HF data sync complete.")
-        return True
-    except Exception as e:
-        st.error(f"Failed to sync data from Hugging Face Hub: {e}")
-        return False
-
-# This command runs once when the app starts or is refreshed
-sync_success = sync_data_from_hf()
-
-# --- Main App ---
 qual_brain, quant_brain = init_brains()
 
 # --- Sidebar ---
@@ -75,22 +56,25 @@ market_data, news_data = load_company_data(selected_company)
 def run_ai_analysis(market_df, news_df):
     news_sentiment = 0
     if not news_df.empty and 'articles' in news_df:
-        articles_df = pd.json_normalize(news_df['articles'])
-        if not articles_df.empty:
-            articles_df['sentiment'] = articles_df['title'].apply(lambda x: qual_brain.analyze_text_sentiment(str(x)))
-            news_sentiment = articles_df['sentiment'].mean()
-    
-    financials_df = pd.DataFrame() 
+        try:
+            articles_df = pd.json_normalize(news_df['articles'])
+            if not articles_df.empty and 'title' in articles_df.columns:
+                articles_df['sentiment'] = articles_df['title'].astype(str).apply(qual_brain.analyze_text_sentiment)
+                news_sentiment = articles_df['sentiment'].mean()
+        except Exception as e:
+            logging.error(f"Error processing news data for sentiment: {e}")
+            news_sentiment = 0
+
+    financials_df = pd.DataFrame()
     analysis_results = quant_brain.get_analysis(market_df, financials_df, news_sentiment)
     return analysis_results
 
 # --- Main Dashboard ---
 st.markdown(f'<h1 class="main-header">AI Corporate Intelligence: {selected_company}</h1>', unsafe_allow_html=True)
 
-if not sync_success:
-    st.error("Could not load data from the cloud. Displaying potentially stale information.")
+if market_data.empty and news_data.empty:
+     st.warning(f"No data found for {selected_company}. Please run the collection and processing scripts first using 'python main.py collect' and 'python main.py process'.")
 
-# Run analysis only if data is available
 if not market_data.empty:
     analysis = run_ai_analysis(market_data, news_data)
     health_score = analysis['health_score']
@@ -98,7 +82,6 @@ if not market_data.empty:
     confidence = analysis['confidence']
     avg_sentiment = analysis.get('news_sentiment', 0)
 
-    # --- Key Metrics ---
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         score_class = "health-score-good" if health_score >= 70 else "health-score-warning" if health_score >= 50 else "health-score-danger"
