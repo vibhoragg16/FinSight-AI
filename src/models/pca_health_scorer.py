@@ -28,8 +28,8 @@ class PCAHealthScorer:
     """
     def __init__(self):
         """Initializes by loading models from Hugging Face Hub."""
-        self.scaler = load_model_from_hub(repo_id=HF_REPO_ID, filename="models/saved/health_scaler.pkl")
-        self.pca = load_model_from_hub(repo_id=HF_REPO_ID, filename="models/saved/health_pca.pkl")
+        self.scaler = load_model_from_hub(repo_id=HF_REPO_ID, filename="health_scaler.pkl")
+        self.pca = load_model_from_hub(repo_id=HF_REPO_ID, filename="health_pca.pkl")
         if self.scaler and self.pca:
             logging.info("PCAHealthScorer initialized with models from Hugging Face Hub.")
 
@@ -106,4 +106,5 @@ class PCAHealthScorer:
         # Weighted blend
         score = 0.30 * cr_score + 0.25 * dte_score + 0.30 * roe_score + 0.15 * roa_score
         return float(round(score, 1))
+
 
