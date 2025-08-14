@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import sys
 import logging
 import re
+from bs4 import BeautifulSoup
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from src.utils.config import TARGET_COMPANIES, MARKET_DATA_PATH, NEWS_DATA_PATH
@@ -13,7 +14,7 @@ from src.rag.query_processor import query_rag_system
 from src.ai_core.qualitative_brain import QualitativeBrain
 from src.ai_core.quantitative_brain import QuantitativeBrain
 from src.data_collection.financials import fetch_financials_dataframe
-from src.utils.financial_ratios import calculate_all_ratios
+from src.utils.financial_ratios import calculate_all_ratios # Import the new function
 
 # --- Page Config ---
 st.set_page_config(page_title="FinSight AI", layout="wide", page_icon="💡")
@@ -97,26 +98,15 @@ def run_ai_analysis(ticker, market_df, news_df, financials_df):
     analysis_results = quant_brain.get_analysis(market_df, financials_df, news_sentiment, ticker=ticker)
     return analysis_results
 
-
 # --- Enhanced Source Display Functions ---
 def get_sec_link(filename, selected_company):
     """Generate SEC EDGAR link if possible"""
-    # Company CIK mapping
     company_ciks = {
-        'AAPL': '0000320193',
-        'MSFT': '0000789019',
-        'GOOGL': '0001652044',
-        'AMZN': '0001018724',
-        'TSLA': '0001318605',
-        'META': '0001326801',
-        'NVDA': '0001045810',
-        'BRK.B': '0001067983',
-        'JNJ': '0000200406',
+        'AAPL': '0000320193', 'MSFT': '0000789019', 'GOOGL': '0001652044',
+        'AMZN': '0001018724', 'TSLA': '0001318605', 'META': '0001326801',
+        'NVDA': '0001045810', 'BRK.B': '0001067983', 'JNJ': '0000200406',
         'V': '0001403161',
-        # Add more as needed
     }
-    
-    # Extract accession number from filename
     accession_match = re.search(r'(\d{10}-\d{2}-\d{6})', filename)
     if accession_match and selected_company in company_ciks:
         cik = company_ciks.get(selected_company)
@@ -126,29 +116,33 @@ def get_sec_link(filename, selected_company):
     return None
 
 def extract_relevant_paragraphs(content, query_keywords, max_paragraphs=3):
-    """Extract paragraphs most relevant to the query"""
-    if not query_keywords:
-        return []
+    """Extract paragraphs most relevant to the query using BeautifulSoup for cleaning."""
+    if not query_keywords: return []
     
-    # Split content into paragraphs
-    paragraphs = [p.strip() for p in content.split('\n\n') if p.strip() and len(p.strip()) > 50]
+    # Use BeautifulSoup to parse and get clean text
+    soup = BeautifulSoup(content, 'html.parser')
     
-    # Score paragraphs based on keyword matches
+    # Get all text and split into potential paragraphs
+    all_text = soup.get_text(separator='\n', strip=True)
+    paragraphs = [p.strip() for p in all_text.split('\n') if len(p.strip()) > 100] # Filter for longer paragraphs
+    
     scored_paragraphs = []
     for para in paragraphs:
+        # Simple scoring: count keyword occurrences
         score = sum(1 for keyword in query_keywords if keyword.lower() in para.lower())
+        # Penalize paragraphs that look like code/links
+        if 'http' in para or '/' in para or len(para.split()) < 10:
+            score -= 5
+            
         if score > 0:
             scored_paragraphs.append((score, para))
-    
-    # Sort by relevance and return top paragraphs
+            
     scored_paragraphs.sort(key=lambda x: x[0], reverse=True)
     return [para for score, para in scored_paragraphs[:max_paragraphs]]
 
-# In streamlit_app.py, replace the entire function with this one
 
 def display_enhanced_sources(sources, prompt=""):
-    """Enhanced source display with direct content access"""
-    
+    """Enhanced source display with direct content access and full-width views."""
     st.markdown("---")
     st.markdown("""
     <div style="padding: 15px; background: linear-gradient(90deg, #28a745 0%, #20c997 100%); border-radius: 8px; margin: 20px 0;">
@@ -158,24 +152,25 @@ def display_enhanced_sources(sources, prompt=""):
     </p>
     </div>
     """, unsafe_allow_html=True)
-    
-    # Group sources by document
+
     doc_sources = {}
     for s in sources:
-        # CORRECTED: Access the 'metadata' dictionary
         doc_key = s.metadata.get("source", "Unknown")
         if doc_key not in doc_sources:
             doc_sources[doc_key] = []
         doc_sources[doc_key].append(s)
-    
+
     query_keywords = prompt.lower().split() if prompt else []
-    
+
     for doc_path, doc_refs in doc_sources.items():
         if doc_path != "Unknown":
+            # --- Initialize a session state for each document expander to manage views ---
+            view_state_key = f'active_view_{hash(doc_path)}'
+            st.session_state.setdefault(view_state_key, None)
+
             filename = os.path.basename(doc_path)
             doc_type = "SEC Filing" if doc_path.endswith('.html') else "Financial Data"
-            
-            # (The rest of the function for determining filing type and SEC links remains the same)
+
             filing_type = None
             if doc_path.endswith('.html'):
                 if '10-k' in filename.lower(): filing_type = "10-K Annual Report"
@@ -184,158 +179,97 @@ def display_enhanced_sources(sources, prompt=""):
                 elif 'def 14a' in filename.lower(): filing_type = "DEF 14A Proxy Statement"
             
             sec_link = get_sec_link(filename, selected_company) if doc_type == "SEC Filing" else None
-            
-            with st.expander(f"📄 {filename} - {doc_type}", expanded=False):
+
+            with st.expander(f"📄 {filename} - {doc_type}", expanded=True):
+                # --- Header Information (Unchanged) ---
                 if filing_type:
                     st.markdown(f'<div style="padding: 12px; background-color: #007bff; color: white; border-radius: 5px; margin-bottom: 15px;"><strong>📋 {filing_type.upper()}</strong><br><small>Official SEC Filing for {selected_company}</small></div>', unsafe_allow_html=True)
-                
                 if sec_link:
                     st.markdown(f'<div style="padding: 15px; background-color: #e3f2fd; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2196f3;"><h4 style="margin: 0 0 10px 0; color: #1976d2;">🔗 Direct SEC EDGAR Link</h4><a href="{sec_link}" target="_blank" style="color: #1976d2; text-decoration: none; font-weight: bold; font-size: 16px;">📊 View Official Filing on SEC.gov</a><br><small style="color: #666; margin-top: 5px; display: block;">Click to access the original document on the SEC website</small></div>', unsafe_allow_html=True)
-                
+
+                # --- Initial Relevant Snippets (Unchanged) ---
                 st.markdown("### 📝 Relevant Content from This Document")
                 for i, ref in enumerate(doc_refs, 1):
-                    # CORRECTED: Get the main text from the 'page_content' attribute
                     snippet = ref.page_content
-                    
                     if snippet and snippet.strip():
-                        st.markdown(f'<div style="padding: 20px; background-color: #f8f9fa; border-left: 4px solid #007bff; border-radius: 5px; margin: 15px 0; border: 1px solid #e9ecef;"><h5 style="color: #007bff; margin-top: 0;">📍 Reference {i}</h5><div style="background: white; padding: 15px; border-radius: 5px; margin: 10px 0;"><p style="margin: 0; line-height: 1.6; color: #495057; font-size: 16px;">{snippet}</p></div></div>', unsafe_allow_html=True)
-                        
-                        context_info = []
-                        # CORRECTED: Access metadata for all context info
-                        if ref.metadata.get("section"):
-                            context_info.append(f'📂 Section: {ref.metadata.get("section")}')
-                        if ref.metadata.get("page"):
-                            context_info.append(f'📄 Page: {ref.metadata.get("page")}')
-                        if ref.metadata.get("source_id"):
-                            context_info.append(f'🏷️ Source ID: {ref.metadata.get("source_id")}')
-                        
+                        st.markdown(f"""
+                        <div style="border-left: 4px solid #007bff; padding-left: 15px; margin: 15px 0; background-color: rgba(0, 123, 255, 0.05); border-radius: 5px;">
+                            <h5 style="color: #00aaff; margin-top: 5px; margin-bottom: 10px;">📍 Reference {i}</h5>
+                            <p style="margin: 0; line-height: 1.6; color: #e0e0e0; font-size: 16px;">{snippet}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        context_info = [f'📂 Section: {ref.metadata.get("section")}' for key in ['section'] if ref.metadata.get(key)]
+                        if ref.metadata.get("page"): context_info.append(f'📄 Page: {ref.metadata.get("page")}')
+                        if ref.metadata.get("source_id"): context_info.append(f'🏷️ Source ID: {ref.metadata.get("source_id")}')
                         if context_info:
-                            st.markdown(f"<small style='color: #6c757d; font-style: italic;'>{' | '.join(context_info)}</small>", unsafe_allow_html=True)
-                
-                # File access options
+                            st.markdown(f"<small style='color: #888; font-style: italic; padding-left: 15px;'>{' | '.join(context_info)}</small>", unsafe_allow_html=True)
+
+                # --- Advanced Options Button Bar ---
                 st.markdown("---")
                 st.markdown("### 📁 Advanced Access Options")
                 
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    # View specific paragraphs
                     if st.button(f"📖 Extract Key Paragraphs", key=f"paragraphs_{hash(doc_path)}"):
-                        if os.path.exists(doc_path):
-                            try:
-                                with open(doc_path, 'r', encoding='utf-8') as f:
-                                    content = f.read()
-                                
-                                relevant_paragraphs = extract_relevant_paragraphs(content, query_keywords)
-                                
-                                if relevant_paragraphs:
-                                    st.markdown("**🎯 Most Relevant Paragraphs:**")
-                                    for j, para in enumerate(relevant_paragraphs, 1):
-                                        # Clean HTML tags if present
-                                        clean_para = re.sub(r'<[^>]+>', '', para)
-                                        st.markdown(f"""
-                                        <div style="padding: 15px; background-color: #fff3cd; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ffc107;">
-                                        <strong>Paragraph {j}:</strong><br><br>
-                                        <div style="line-height: 1.6;">{clean_para[:800]}{'...' if len(clean_para) > 800 else ''}</div>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-                                else:
-                                    st.info("💡 No highly relevant paragraphs found. Try refining your query with specific financial terms.")
-                            except Exception as e:
-                                st.error(f"❌ Could not extract paragraphs: {e}")
-                        else:
-                            st.error("❌ File not found")
-                
+                        st.session_state[view_state_key] = 'paragraphs' if st.session_state[view_state_key] != 'paragraphs' else None
                 with col2:
-                    # Download file
                     if os.path.exists(doc_path):
-                        try:
-                            with open(doc_path, 'rb') as f:
-                                file_data = f.read()
-                            
-                            st.download_button(
-                                label="💾 Download Full File",
-                                data=file_data,
-                                file_name=filename,
-                                mime="text/html" if doc_path.endswith('.html') else "text/plain",
-                                key=f"download_{hash(doc_path)}"
-                            )
-                        except Exception as e:
-                            st.error(f"❌ Could not prepare download: {e}")
-                    else:
-                        st.error("❌ File not available for download")
-                
+                        with open(doc_path, 'rb') as f: file_data = f.read()
+                        st.download_button(
+                            label="💾 Download Full File", data=file_data, file_name=filename,
+                            mime="text/html" if doc_path.endswith('.html') else "text/plain",
+                            key=f"download_{hash(doc_path)}"
+                        )
                 with col3:
-                    # Show full content in expandable section
                     if st.button(f"📄 View Complete Content", key=f"fullcontent_{hash(doc_path)}"):
+                        st.session_state[view_state_key] = 'content' if st.session_state[view_state_key] != 'content' else None
+
+                # --- Full-Width Display Area ---
+                if st.session_state[view_state_key] == 'paragraphs':
+                    with st.spinner("Extracting and cleaning relevant paragraphs..."):
                         if os.path.exists(doc_path):
-                            try:
-                                with open(doc_path, 'r', encoding='utf-8') as f:
-                                    full_content = f.read()
-                                
-                                st.markdown("**📄 Complete File Content:**")
-                                # Clean content for better display
-                                if doc_path.endswith('.html'):
-                                    # Remove HTML tags for cleaner reading
-                                    clean_content = re.sub(r'<[^>]+>', '', full_content)
-                                    clean_content = re.sub(r'\n\s*\n', '\n\n', clean_content)
-                                else:
-                                    clean_content = full_content
-                                
-                                st.text_area(
-                                    f"Content of {filename}:",
-                                    clean_content,
-                                    height=400,
-                                    key=f"content_area_{hash(doc_path)}"
-                                )
-                            except Exception as e:
-                                st.error(f"❌ Could not read file: {e}")
-                        else:
-                            st.error("❌ File not found")
+                            with open(doc_path, 'r', encoding='utf-8') as f: content = f.read()
+                            relevant_paragraphs = extract_relevant_paragraphs(content, query_keywords)
+                            if relevant_paragraphs:
+                                st.markdown("**🎯 Most Relevant Paragraphs:**")
+                                for j, para in enumerate(relevant_paragraphs, 1):
+                                    st.markdown(f"""
+                                    <div style="padding: 15px; background-color: rgba(255, 193, 7, 0.1); color: #e0e0e0; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ffc107;">
+                                        <strong style="color: #ffc107;">Paragraph {j}:</strong>
+                                        <div style="line-height: 1.6; margin-top: 8px;">{para}</div>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                            else: st.info("💡 No highly relevant paragraphs found.")
+                        else: st.error("❌ File not found")
                 
-                # File information
+                elif st.session_state[view_state_key] == 'content':
+                    if os.path.exists(doc_path):
+                        with open(doc_path, 'r', encoding='utf-8') as f: full_content = f.read()
+                        soup = BeautifulSoup(full_content, 'html.parser')
+                        clean_content = soup.get_text(separator='\n', strip=True)
+                        st.markdown("**📄 Complete File Content (Cleaned):**")
+                        st.text_area("", clean_content, height=400, key=f"content_area_{hash(doc_path)}")
+                    else: st.error("❌ File not found")
+                        
+                # --- File Details ---
                 if os.path.exists(doc_path):
                     file_size = os.path.getsize(doc_path)
                     file_modified = os.path.getmtime(doc_path)
                     st.markdown(f"""
-                    <div style="padding: 12px; background-color: #e9ecef; border-radius: 5px; margin: 15px 0;">
-                    <strong>ℹ️ File Details:</strong><br>
-                    📁 Path: <code>{doc_path}</code><br>
-                    📏 Size: {file_size:,} bytes<br>
-                    🕐 Last Modified: {pd.to_datetime(file_modified, unit='s').strftime('%Y-%m-%d %H:%M:%S')}
+                    <div style="padding: 12px; background-color: rgba(108, 117, 125, 0.1); border-radius: 5px; margin: 15px 0; border: 1px solid #444;">
+                        <strong>ℹ️ File Details:</strong><br>
+                        <span style="color: #ccc;">📁 Path:</span> <code>{doc_path}</code><br>
+                        <span style="color: #ccc;">📏 Size:</span> <span style="color: #e0e0e0;">{file_size:,} bytes</span><br>
+                        <span style="color: #ccc;">🕐 Last Modified:</span> <span style="color: #e0e0e0;">{pd.to_datetime(file_modified, unit='s').strftime('%Y-%m-%d %H:%M:%S')}</span>
                     </div>
                     """, unsafe_allow_html=True)
-                
-                # Document structure for HTML files
-                if doc_path.endswith('.html') and os.path.exists(doc_path):
-                    with st.expander("🏗️ Document Structure Analysis", expanded=False):
-                        try:
-                            with open(doc_path, 'r', encoding='utf-8') as f:
-                                content = f.read()
-                            
-                            # Extract headings
-                            headings = re.findall(r'<h[1-6][^>]*>(.*?)</h[1-6]>', content, re.IGNORECASE | re.DOTALL)
-                            if headings:
-                                st.markdown("**📋 Document Sections:**")
-                                for j, heading in enumerate(headings[:15], 1):  # Show first 15 headings
-                                    clean_heading = re.sub(r'<[^>]+>', '', heading).strip()
-                                    if clean_heading and len(clean_heading) > 3:
-                                        st.markdown(f"{j}. {clean_heading}")
-                            else:
-                                # Try to find other structural elements
-                                tables = len(re.findall(r'<table', content, re.IGNORECASE))
-                                divs = len(re.findall(r'<div', content, re.IGNORECASE))
-                                st.markdown(f"**📊 Document Elements:**")
-                                st.markdown(f"• Tables found: {tables}")
-                                st.markdown(f"• Div sections: {divs}")
-                        except Exception as e:
-                            st.error(f"Could not analyze document structure: {e}")
 
 # --- Main Dashboard ---
 st.markdown(f'<h1 class="main-header">AI Corporate Intelligence: {selected_company}</h1>', unsafe_allow_html=True)
 
 if market_data.empty and news_data.empty:
-     st.warning(f"No data found for {selected_company}. Please run the collection and processing scripts first using 'python main.py collect' and 'python main.py process'.")
+     st.warning(f"No data found for {selected_company}. Please run data collection and processing scripts.")
 
 if not market_data.empty:
     analysis = run_ai_analysis(selected_company, market_data, news_data, financials_data)
@@ -365,12 +299,8 @@ else:
 # --- Tabs ---
 tab_labels = ["📈 Market Analysis", "🤖 AI Analyst Chat", "📰 News Analysis", "💡 Deep Dive"]
 selected_tab = st.tabs(tab_labels)
-tab_market = selected_tab[0]
-tab_chat = selected_tab[1] 
-tab_news = selected_tab[2]
-tab_deep = selected_tab[3]
+tab_market, tab_chat, tab_news, tab_deep = selected_tab[0], selected_tab[1], selected_tab[2], selected_tab[3]
 
-# Navigation section
 st.markdown("---")
 st.markdown(f"""
 <div style="padding: 15px; background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); border-radius: 8px; margin: 20px 0;">
@@ -386,59 +316,29 @@ with tab_market:
         st.header("📈 Market Performance Analysis")
         st.markdown("*Real-time market data and performance metrics*")
         
-        # Market overview cards
         col1, col2, col3 = st.columns(3)
         with col1:
             latest = market_data.iloc[-1]
             st.metric("Current Price", f"${latest['Close']:.2f}", f"{latest['Close'] - market_data.iloc[-2]['Close']:+.2f}")
-        with col2:
-            st.metric("Day Range", f"${latest['Low']:.2f} - ${latest['High']:.2f}")
-        with col3:
-            st.metric("Volume", f"{latest['Volume']:,}")
+        with col2: st.metric("Day Range", f"${latest['Low']:.2f} - ${latest['High']:.2f}")
+        with col3: st.metric("Volume", f"{latest['Volume']:,}")
         
-        # Candlestick chart
-        fig = go.Figure(data=[go.Candlestick(
-            x=market_data['Date'], 
-            open=market_data['Open'], 
-            high=market_data['High'], 
-            low=market_data['Low'], 
-            close=market_data['Close'], 
-            name="Price"
-        )])
-        fig.update_layout(
-            title=f"{selected_company} Stock Price",
-            xaxis_title="Date",
-            yaxis_title="Price ($)",
-            template="plotly_dark"
-        )
+        fig = go.Figure(data=[go.Candlestick(x=market_data['Date'], open=market_data['Open'], high=market_data['High'], low=market_data['Low'], close=market_data['Close'], name="Price")])
+        fig.update_layout(title=f"{selected_company} Stock Price", xaxis_title="Date", yaxis_title="Price ($)", template="plotly_dark")
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("📊 No market data available. Please run the data collection script.")
 
 with tab_chat:
-    # Clean chat header
     st.header("🤖 AI Financial Analyst")
     st.markdown("*Your intelligent companion for financial analysis and SEC filing insights*")
     
-    # Enhanced pro tips
     st.markdown("""
     <div style="padding: 20px; background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%); border-radius: 10px; margin: 20px 0; border: 2px solid #3498db; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
     <div style="display: flex; justify-content: space-around; align-items: center; flex-wrap: wrap; gap: 25px;">
-        <div style="text-align: center; padding: 15px; background: rgba(52, 152, 219, 0.2); border-radius: 8px; border: 1px solid #3498db;">
-            <div style="font-size: 24px; margin-bottom: 8px;">📊</div>
-            <strong style="color: #ecf0f1; font-size: 16px;">Financial Metrics</strong><br>
-            <small style="color: #bdc3c7;">Ask about specific numbers</small>
-        </div>
-        <div style="text-align: center; padding: 15px; background: rgba(46, 204, 113, 0.2); border-radius: 8px; border: 1px solid #2ecc71;">
-            <div style="font-size: 24px; margin-bottom: 8px;">📄</div>
-            <strong style="color: #ecf0f1; font-size: 16px;">SEC Filings</strong><br>
-            <small style="color: #bdc3c7;">Get direct EDGAR links</small>
-        </div>
-        <div style="text-align: center; padding: 15px; background: rgba(155, 89, 182, 0.2); border-radius: 8px; border: 1px solid #9b59b6;">
-            <div style="font-size: 24px; margin-bottom: 8px;">📈</div>
-            <strong style="color: #ecf0f1; font-size: 16px;">Smart Analysis</strong><br>
-            <small style="color: #bdc3c7;">Direct source paragraphs</small>
-        </div>
+        <div style="text-align: center; padding: 15px; background: rgba(52, 152, 219, 0.2); border-radius: 8px; border: 1px solid #3498db;"><div style="font-size: 24px; margin-bottom: 8px;">📊</div><strong style="color: #ecf0f1; font-size: 16px;">Financial Metrics</strong><br><small style="color: #bdc3c7;">Ask about specific numbers</small></div>
+        <div style="text-align: center; padding: 15px; background: rgba(46, 204, 113, 0.2); border-radius: 8px; border: 1px solid #2ecc71;"><div style="font-size: 24px; margin-bottom: 8px;">📄</div><strong style="color: #ecf0f1; font-size: 16px;">SEC Filings</strong><br><small style="color: #bdc3c7;">Get direct EDGAR links</small></div>
+        <div style="text-align: center; padding: 15px; background: rgba(155, 89, 182, 0.2); border-radius: 8px; border: 1px solid #9b59b6;"><div style="font-size: 24px; margin-bottom: 8px;">📈</div><strong style="color: #ecf0f1; font-size: 16px;">Smart Analysis</strong><br><small style="color: #bdc3c7;">Direct source paragraphs</small></div>
     </div>
     </div>
     """, unsafe_allow_html=True)
@@ -447,37 +347,38 @@ with tab_chat:
     if session_key not in st.session_state:
         st.session_state[session_key] = []
     
-    # Display chat messages with better styling
-    if st.session_state[session_key]:
-        st.markdown("---")
-        st.markdown("**💬 Conversation History**")
-        for message in st.session_state[session_key]:
-            with st.chat_message(message["role"]): 
-                st.markdown(message["content"])
-    
-    # Chat input with unique key per company
+    # Display chat messages from history
+    for message in st.session_state[session_key]:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+            if message["role"] == "assistant" and "sources" in message and message["sources"]:
+                display_enhanced_sources(message["sources"], message.get("prompt", ""))
+
+    # Chat input
     chat_key = f"chat_input_{selected_company}"
-    prompt = st.chat_input(f"Ask about {selected_company}'s financials, SEC filings, or market performance...", key=chat_key)
+    prompt = st.chat_input(f"Ask about {selected_company}'s financials...", key=chat_key)
     
     if prompt:
         st.session_state[session_key].append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
+
         with st.chat_message("assistant"):
             with st.spinner("🔍 Analyzing financial data and SEC filings..."):
                 try:
                     response, sources = query_rag_system(selected_company, prompt)
+                    st.markdown(response)
+                    if sources:
+                        display_enhanced_sources(sources, prompt)
+                    
+                    st.session_state[session_key].append({
+                        "role": "assistant", "content": response, 
+                        "sources": sources, "prompt": prompt
+                    })
                 except Exception as e:
-                    response, sources = (f"Sorry, I couldn't complete the analysis: {e}", [])
-                
-                st.markdown(response)
-                
-                # Enhanced source display
-                if sources:
-                    display_enhanced_sources(sources, prompt)
-        
-        # Persist assistant response
-        st.session_state[session_key].append({"role": "assistant", "content": response})
+                    error_response = f"Sorry, I couldn't complete the analysis: {e}"
+                    st.error(error_response)
+                    st.session_state[session_key].append({"role": "assistant", "content": error_response, "sources": []})
 
 with tab_news:
     st.header("📰 Recent Company News")
@@ -485,229 +386,110 @@ with tab_news:
     
     if not news_data.empty:
         display_df = news_data.copy()
-        if 'publishedAt' in display_df:
-            display_df['publishedAt'] = pd.to_datetime(display_df['publishedAt'], errors='coerce')
         
-        # News summary metrics
+        # --- News Metrics (Unchanged) ---
         col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total Articles", len(display_df))
+        with col1: st.metric("Total Articles", len(display_df))
         with col2:
-            latest_news = display_df['publishedAt'].max() if 'publishedAt' in display_df else None
-            if latest_news:
-                st.metric("Latest News", latest_news.strftime('%Y-%m-%d'))
-        with col3:
-            st.metric("News Sources", display_df['source.name'].nunique() if 'source.name' in display_df else 0)
+            latest_news = pd.to_datetime(display_df['publishedAt']).max() if 'publishedAt' in display_df else None
+            if latest_news: st.metric("Latest News", latest_news.strftime('%Y-%m-%d'))
+        with col3: st.metric("News Sources", display_df['source.name'].nunique() if 'source.name' in display_df else 0)
         
-        # News articles with better styling
-        for i, (_, article) in enumerate(display_df.head(5).iterrows()):
+        st.markdown("---")
+
+        # --- New Two-Column News Card Layout ---
+        for i, article in display_df.head(5).iterrows():
             title = article.get('title', 'Untitled')
             url = article.get('url', '')
-            source = article.get('source.name', article.get('source', 'Unknown'))
-            published = article.get('publishedAt')
-            published_str = pd.to_datetime(published, errors='coerce').strftime('%Y-%m-%d') if pd.notna(published) else ''
-            description = article.get('description', '')
-            
-            with st.container():
-                st.markdown(f"""
-                <div style="padding: 15px; border: 1px solid #e9ecef; border-radius: 8px; margin: 10px 0; background-color: #f8f9fa;">
-                <h4 style="margin: 0 0 10px 0;"><a href="{url}" target="_blank">{title}</a></h4>
-                <p style="color: #6c757d; margin: 5px 0; font-size: 0.9em;">
-                📰 <strong>{source}</strong> | 📅 {published_str}
-                </p>
-                """, unsafe_allow_html=True)
-                
-                if description:
-                    st.markdown(f"<p style='margin: 10px 0 0 0;'>{description}</p>", unsafe_allow_html=True)
-                
-                st.markdown("</div>", unsafe_allow_html=True)
+            image_url = article.get('urlToImage')
+            source = article.get('source.name', 'Unknown')
+            published_str = pd.to_datetime(article.get('publishedAt')).strftime('%Y-%m-%d %H:%M') if pd.notna(article.get('publishedAt')) else ''
+            description = article.get('description', 'No description available.')
+
+            st.markdown(f"""
+            <div style="background-color: #262730; border-radius: 10px; padding: 15px; margin-bottom: 15px; border: 1px solid #333;">
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    {f'<img src="{image_url}" style="width: 120px; height: 120px; object-fit: cover; border-radius: 8px;">' if image_url else ''}
+                    <div style="flex: 1;">
+                        <p style="color: #aaa; margin: 0; font-size: 0.8em;">{source.upper()} | {published_str}</p>
+                        <h4 style="margin: 5px 0;"><a href="{url}" target="_blank" style="color: #e0e0e0; text-decoration: none;">{title}</a></h4>
+                        <p style="color: #ccc; margin: 0; font-size: 0.9em;">{description}</p>
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
     else:
         st.info("📰 No news data available. Please run the data collection script.")
-
 with tab_deep:
     st.header("💡 AI-Powered Deep Dive Analysis")
     st.markdown("*Comprehensive AI-generated insights and executive summary*")
     
     if not market_data.empty:
-        # Analysis overview cards
         col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("AI Health Score", f"{health_score:.1f}/100", 
-                     "🟢 Strong" if health_score >= 70 else "🟡 Moderate" if health_score >= 50 else "🔴 Weak")
-        with col2:
-            st.metric("AI Forecast", prediction, f"{confidence:.1%} confidence")
+        with col1: st.metric("AI Health Score", f"{health_score:.1f}/100", "🟢 Strong" if health_score >= 70 else "🟡 Moderate" if health_score >= 50 else "🔴 Weak")
+        with col2: st.metric("AI Forecast", prediction, f"{confidence:.1%} confidence")
         with col3:
             sentiment_label = "Positive" if avg_sentiment > 0.1 else "Negative" if avg_sentiment < -0.1 else "Neutral"
             st.metric("News Sentiment", sentiment_label, f"{avg_sentiment:.2f}")
         
-        # AI Executive Summary
         st.markdown("---")
         st.markdown("### 🤖 AI Executive Summary")
         
-        with st.spinner("🤖 AI is analyzing company data and generating insights..."):
-            summary_prompt = f"""
-            Generate a comprehensive executive summary for {selected_company} based on:
-            - Health Score: {health_score:.1f}/100
-            - Forecast: {prediction} ({confidence:.1%} confidence)
-            - News Sentiment: {avg_sentiment:.2f}
-            
-            Please provide:
-            1. Key financial highlights
-            2. Market position analysis
-            3. Risk factors and concerns
-            4. Strategic recommendations
-            5. Future outlook
-            
-            Format the response in clear sections with bullet points where appropriate.
-            """
+        with st.spinner("🤖 AI is generating an executive summary..."):
+            summary_prompt = f"Generate a comprehensive executive summary for {selected_company} based on: Health Score: {health_score:.1f}/100, Forecast: {prediction} ({confidence:.1%} confidence), and News Sentiment: {avg_sentiment:.2f}. Please provide key financial highlights, market position, risk factors, strategic recommendations, and future outlook in clear sections."
             try:
                 from src.utils.config import GROQ_LLM_MODEL
-                response = qual_brain.groq_client.chat.completions.create(
-                    model=GROQ_LLM_MODEL,
-                    messages=[{"role": "user", "content": summary_prompt}],
-                    temperature=0.3
-                )
-                
-                # Display the AI response in a styled container
+                response = qual_brain.groq_client.chat.completions.create(model=GROQ_LLM_MODEL, messages=[{"role": "user", "content": summary_prompt}], temperature=0.3)
                 ai_summary = response.choices[0].message.content
-                st.markdown(f"""
-                <div style="padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; color: white; margin: 20px 0;">
-                <h4 style="margin: 0 0 15px 0; text-align: center;">🎯 AI Analysis Results</h4>
-                <div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; line-height: 1.6;">
-                {ai_summary}
-                </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
+                st.markdown(f'<div style="padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; color: white; margin: 20px 0;"><h4 style="margin: 0 0 15px 0; text-align: center;">🎯 AI Analysis Results</h4><div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; line-height: 1.6;">{ai_summary}</div></div>', unsafe_allow_html=True)
             except Exception as e:
                 st.error(f"⚠️ Could not generate AI summary: {e}")
-                st.info("💡 Please ensure your GROQ API key is properly configured.")
-        
-        # Additional Analysis Tools
+
         st.markdown("---")
         st.markdown("### 🛠️ Advanced Analysis Tools")
         
         col1, col2 = st.columns(2)
         
         with col1:
-            
-            # New code for streamlit_app.py
             if st.button("📊 Generate Financial Ratios Analysis", key="financial_ratios"):
                 with st.spinner("Calculating financial ratios..."):
-                    if financials_data.empty:
-                        st.warning("❌ No financial data available to calculate ratios.")
+                    if financials_data.empty: st.warning("❌ No financial data available to calculate ratios.")
                     else:
                         try:
                             ratios_df = calculate_all_ratios(financials_data)
-
-                            # Find the latest row that has at least one valid, non-null ratio
-                            latest_valid_row = ratios_df.dropna(
-                                how='all', 
-                                subset=ratios_df.columns.drop('Date')
-                            ).head(1)
-
+                            latest_valid_row = ratios_df.dropna(how='all', subset=ratios_df.columns.drop('Date')).head(1)
                             if not latest_valid_row.empty:
                                 st.success("✅ Financial Ratios Calculated Successfully!")
-                                
-                                # Display the latest *available* ratios in a clean table
                                 latest_date = latest_valid_row['Date'].iloc[0].strftime('%Y-%m-%d')
                                 st.markdown(f"#### Latest Available Financial Ratios (as of {latest_date})")
-                                
                                 display_df = latest_valid_row.set_index('Date').T
                                 st.dataframe(display_df.style.format("{:.2f}", na_rep="N/A"))
-
-                                # Display a chart to show trends over time
                                 st.markdown("#### Ratio Trends Over Time")
                                 st.line_chart(ratios_df.set_index('Date')[['DebtToEquity', 'NetProfitMargin', 'ReturnOnEquity']])
+                            else: st.error("❌ Could not calculate any valid ratios from the available data.")
+                        except Exception as e: st.error(f"An error occurred during ratio calculation: {e}")
 
-                            else:
-                                st.error("❌ Could not calculate any valid ratios from the available data.")
-
-                        except Exception as e:
-                            st.error(f"An error occurred during ratio calculation: {e}")
         with col2:
             if st.button("📈 Generate Peer Comparison", key="peer_comparison"):
-                with st.spinner("Analyzing peer companies..."):
-                    try:
-                        # This would ideally compare with other companies in TARGET_COMPANIES
-                        st.markdown("#### Peer Company Comparison")
-                        
-                        # Show comparison with other available companies
-                        available_companies = [comp for comp in TARGET_COMPANIES if comp != selected_company]
-                        
-                        if available_companies:
-                            st.markdown(f"**Comparing {selected_company} with:**")
-                            for comp in available_companies[:5]:  # Show up to 5 peers
-                                st.markdown(f"• {comp}")
-                            
-                            st.info("💡 Detailed peer analysis would compare financial metrics, market performance, and growth rates.")
-                        else:
-                            st.warning("No peer companies available for comparison.")
-                            
-                    except Exception as e:
-                        st.error(f"Error generating peer comparison: {e}")
+                st.info("💡 Peer comparison feature coming soon!")
         
-        # Risk Assessment Section
         st.markdown("---")
         st.markdown("### ⚠️ Risk Assessment Dashboard")
         
         risk_col1, risk_col2, risk_col3 = st.columns(3)
-        
         with risk_col1:
-            # Market Risk
             market_risk = "High" if confidence < 0.6 else "Medium" if confidence < 0.8 else "Low"
             risk_color = "#dc3545" if market_risk == "High" else "#ffc107" if market_risk == "Medium" else "#28a745"
-            st.markdown(f"""
-            <div style="padding: 15px; background-color: {risk_color}20; border-left: 4px solid {risk_color}; border-radius: 5px;">
-            <h4 style="color: {risk_color}; margin: 0;">📊 Market Risk</h4>
-            <p style="margin: 5px 0 0 0; font-weight: bold;">{market_risk}</p>
-            <small>Based on prediction confidence</small>
-            </div>
-            """, unsafe_allow_html=True)
-        
+            st.markdown(f'<div style="padding: 15px; background-color: {risk_color}20; border-left: 4px solid {risk_color}; border-radius: 5px;"><h4 style="color: {risk_color}; margin: 0;">📊 Market Risk</h4><p style="margin: 5px 0 0 0; font-weight: bold;">{market_risk}</p><small>Based on prediction confidence</small></div>', unsafe_allow_html=True)
         with risk_col2:
-            # Financial Health Risk
             health_risk = "Low" if health_score >= 70 else "Medium" if health_score >= 50 else "High"
             risk_color = "#28a745" if health_risk == "Low" else "#ffc107" if health_risk == "Medium" else "#dc3545"
-            st.markdown(f"""
-            <div style="padding: 15px; background-color: {risk_color}20; border-left: 4px solid {risk_color}; border-radius: 5px;">
-            <h4 style="color: {risk_color}; margin: 0;">💰 Financial Risk</h4>
-            <p style="margin: 5px 0 0 0; font-weight: bold;">{health_risk}</p>
-            <small>Based on health score</small>
-            </div>
-            """, unsafe_allow_html=True)
-        
+            st.markdown(f'<div style="padding: 15px; background-color: {risk_color}20; border-left: 4px solid {risk_color}; border-radius: 5px;"><h4 style="color: {risk_color}; margin: 0;">💰 Financial Risk</h4><p style="margin: 5px 0 0 0; font-weight: bold;">{health_risk}</p><small>Based on health score</small></div>', unsafe_allow_html=True)
         with risk_col3:
-            # Sentiment Risk
             sentiment_risk = "Low" if avg_sentiment > 0.1 else "High" if avg_sentiment < -0.1 else "Medium"
             risk_color = "#28a745" if sentiment_risk == "Low" else "#ffc107" if sentiment_risk == "Medium" else "#dc3545"
-            st.markdown(f"""
-            <div style="padding: 15px; background-color: {risk_color}20; border-left: 4px solid {risk_color}; border-radius: 5px;">
-            <h4 style="color: {risk_color}; margin: 0;">📰 Sentiment Risk</h4>
-            <p style="margin: 5px 0 0 0; font-weight: bold;">{sentiment_risk}</p>
-            <small>Based on news sentiment</small>
-            </div>
-            """, unsafe_allow_html=True)
-        
+            st.markdown(f'<div style="padding: 15px; background-color: {risk_color}20; border-left: 4px solid {risk_color}; border-radius: 5px;"><h4 style="color: {risk_color}; margin: 0;">📰 Sentiment Risk</h4><p style="margin: 5px 0 0 0; font-weight: bold;">{sentiment_risk}</p><small>Based on news sentiment</small></div>', unsafe_allow_html=True)
     else:
-        st.info("📊 Not enough data available to generate a deep dive analysis. Please run the data collection script first.")
-        
-        # Show data collection guidance
-        st.markdown("""
-        ### 🚀 Getting Started
-        
-        To enable full analysis capabilities:
-        
-        1. **Collect Market Data**: Run `python main.py collect` to gather market data
-        2. **Process SEC Filings**: Run `python main.py process` to analyze SEC documents  
-        3. **Schedule Updates**: Set up automated data collection for real-time insights
-        
-        Once data is available, you'll see:
-        - 📈 Interactive market charts
-        - 🤖 AI-powered financial analysis
-        - 📄 Direct SEC filing access
-        - 💡 Comprehensive risk assessment
-        """)
+        st.info("📊 Not enough data available to generate a deep dive analysis.")
 
-# Footer with additional information
-st.markdown("---")
+# --- Footer ---
