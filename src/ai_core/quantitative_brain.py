@@ -8,7 +8,7 @@ import logging
 from src.models.pca_health_scorer import PCAHealthScorer
 from src.features.build_features import prepare_features_for_prediction
 from src.utils.financial_ratios import calculate_all_ratios
-from src.utils.config import MODEL_SAVE_PATH as MODELS_PATH
+from src.utils.config import HF_REPO_ID, MODEL_SAVE_PATH as MODELS_PATH
 
 import streamlit as st
 from huggingface_hub import hf_hub_download
@@ -77,3 +77,4 @@ class QuantitativeBrain:
                 'news_sentiment': news_sentiment
 
             }
+
