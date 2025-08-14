@@ -30,7 +30,7 @@ NEWS_DATA_PATH = "./data/news"
 MODEL_SAVE_PATH = os.environ.get("MODEL_SAVE_PATH", "./models/saved")
 
 
-HF_REPO_ID = "vibhoragg/finsight-ai-assets"
+HF_REPO_ID = "Vibhoragg/finsight-ai-assets"
 
 # --- Alerting ---
 SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
@@ -46,5 +46,6 @@ SCHEDULER_NEWS_DATA_HOURS = 6
 SCHEDULER_AI_ANALYSIS_HOURS = 8
 
 SCHEDULER_SEC_FILINGS_DAYS = 1
+
 
 
