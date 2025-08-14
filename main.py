@@ -75,6 +75,18 @@ def run_processing():
     process_all_documents()
     logging.info("Document processing finished.")
 
+def run_training():
+    """Runs the model training scripts."""
+    logging.info("Starting model training...")
+    try:
+        from src.models.train_model import train_all_models
+        train_all_models()
+        logging.info("Model training finished successfully.")
+    except ImportError:
+        logging.error("Could not import training modules. Please ensure 'src.models.train_model' exists.")
+    except Exception as e:
+        logging.error(f"An error occurred during model training: {e}")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="AI-Powered Corporate Intelligence Platform.",
@@ -86,6 +98,7 @@ Examples:
   python main.py scheduler --now # Run one full cycle immediately, then start schedule
   python main.py collect --type news --type market # Collect only news and market data
   python main.py process         # Process downloaded documents into the vector store
+  python main.py train           # Train or retrain the ML models   
 """
     )
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
@@ -99,6 +112,8 @@ Examples:
 
     process_parser = subparsers.add_parser('process', help='Process downloaded documents.')
 
+    train_parser = subparsers.add_parser('train', help='Train the AI/ML models.')
+
     args = parser.parse_args()
 
     if args.command == 'dashboard':
@@ -109,5 +124,7 @@ Examples:
         run_collection(args.type)
     elif args.command == 'process':
         run_processing()
+    elif args.command == 'train':
+        run_training()
     else:
         parser.print_help()
