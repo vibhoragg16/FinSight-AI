@@ -9,7 +9,7 @@ import re
 from bs4 import BeautifulSoup
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from src.utils.config import TARGET_COMPANIES, MARKET_DATA_PATH, NEWS_DATA_PATH
+from src.utils.config import TARGET_COMPANIES, MARKET_DATA_PATH, NEWS_DATA_PATH, GROQ_LLM_MODEL
 from src.rag.query_processor import query_rag_system
 from src.ai_core.qualitative_brain import QualitativeBrain
 from src.ai_core.quantitative_brain import QuantitativeBrain
@@ -117,38 +117,43 @@ def get_sec_link(filename, selected_company):
 
 def extract_relevant_paragraphs(content, query_keywords, max_paragraphs=3):
     """Extract paragraphs most relevant to the query using BeautifulSoup for cleaning."""
-    if not query_keywords: return []
-    
+    if not query_keywords:
+        return []
+
     # Use BeautifulSoup to parse and get clean text
     soup = BeautifulSoup(content, 'html.parser')
-    
+
     # Get all text and split into potential paragraphs
     all_text = soup.get_text(separator='\n', strip=True)
-    paragraphs = [p.strip() for p in all_text.split('\n') if len(p.strip()) > 100] # Filter for longer paragraphs
-    
+    # Filter for longer paragraphs that are more likely to contain prose
+    paragraphs = [p.strip() for p in all_text.split('\n') if len(p.strip()) > 150]
+
     scored_paragraphs = []
     for para in paragraphs:
         # Simple scoring: count keyword occurrences
         score = sum(1 for keyword in query_keywords if keyword.lower() in para.lower())
         # Penalize paragraphs that look like code/links
-        if 'http' in para or '/' in para or len(para.split()) < 10:
+        if 'http' in para or '/' in para or len(para.split()) < 15:
             score -= 5
-            
+
         if score > 0:
             scored_paragraphs.append((score, para))
-            
+
     scored_paragraphs.sort(key=lambda x: x[0], reverse=True)
     return [para for score, para in scored_paragraphs[:max_paragraphs]]
 
 
 def display_enhanced_sources(sources, prompt=""):
-    """Enhanced source display with direct content access and full-width views."""
+    """
+    Enhanced source display with direct content access, full-width views,
+    and AI-powered analysis capabilities.
+    """
     st.markdown("---")
     st.markdown("""
     <div style="padding: 15px; background: linear-gradient(90deg, #28a745 0%, #20c997 100%); border-radius: 8px; margin: 20px 0;">
     <h3 style="color: white; margin: 0; text-align: center;">📚 Sources & Direct Access</h3>
     <p style="color: white; margin: 10px 0 0 0; text-align: center; opacity: 0.9;">
-    Direct links, full content, and relevant paragraphs from official sources
+    Direct links, full content, and AI-powered analysis of official sources
     </p>
     </div>
     """, unsafe_allow_html=True)
@@ -164,69 +169,93 @@ def display_enhanced_sources(sources, prompt=""):
 
     for doc_path, doc_refs in doc_sources.items():
         if doc_path != "Unknown":
-            # --- Initialize a session state for each document expander to manage views ---
+            # Initialize a session state for each document expander to manage views
             view_state_key = f'active_view_{hash(doc_path)}'
             st.session_state.setdefault(view_state_key, None)
 
             filename = os.path.basename(doc_path)
             doc_type = "SEC Filing" if doc_path.endswith('.html') else "Financial Data"
-
-            filing_type = None
-            if doc_path.endswith('.html'):
-                if '10-k' in filename.lower(): filing_type = "10-K Annual Report"
-                elif '10-q' in filename.lower(): filing_type = "10-Q Quarterly Report"
-                elif '8-k' in filename.lower(): filing_type = "8-K Current Report"
-                elif 'def 14a' in filename.lower(): filing_type = "DEF 14A Proxy Statement"
             
-            sec_link = get_sec_link(filename, selected_company) if doc_type == "SEC Filing" else None
-
             with st.expander(f"📄 {filename} - {doc_type}", expanded=True):
-                # --- Header Information (Unchanged) ---
+                # Header Information (SEC Link, etc.)
+                filing_type = None
+                if doc_path.endswith('.html'):
+                    if '10-k' in filename.lower(): filing_type = "10-K Annual Report"
+                    elif '10-q' in filename.lower(): filing_type = "10-Q Quarterly Report"
+                    elif '8-k' in filename.lower(): filing_type = "8-K Current Report"
+                sec_link = get_sec_link(filename, selected_company)
                 if filing_type:
-                    st.markdown(f'<div style="padding: 12px; background-color: #007bff; color: white; border-radius: 5px; margin-bottom: 15px;"><strong>📋 {filing_type.upper()}</strong><br><small>Official SEC Filing for {selected_company}</small></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="padding: 12px; background-color: #007bff; color: white; border-radius: 5px; margin-bottom: 15px;"><strong>📋 {filing_type.upper()}</strong></div>', unsafe_allow_html=True)
                 if sec_link:
-                    st.markdown(f'<div style="padding: 15px; background-color: #e3f2fd; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2196f3;"><h4 style="margin: 0 0 10px 0; color: #1976d2;">🔗 Direct SEC EDGAR Link</h4><a href="{sec_link}" target="_blank" style="color: #1976d2; text-decoration: none; font-weight: bold; font-size: 16px;">📊 View Official Filing on SEC.gov</a><br><small style="color: #666; margin-top: 5px; display: block;">Click to access the original document on the SEC website</small></div>', unsafe_allow_html=True)
+                    st.markdown(f'<div style="padding: 15px; background-color: #e3f2fd; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2196f3;"><h4 style="margin: 0 0 10px 0; color: #1976d2;">🔗 Direct SEC EDGAR Link</h4><a href="{sec_link}" target="_blank" style="color: #1976d2; text-decoration: none; font-weight: bold;">📊 View Official Filing on SEC.gov</a></div>', unsafe_allow_html=True)
 
-                # --- Initial Relevant Snippets (Unchanged) ---
+                # Initial Relevant Snippets
                 st.markdown("### 📝 Relevant Content from This Document")
                 for i, ref in enumerate(doc_refs, 1):
                     snippet = ref.page_content
-                    if snippet and snippet.strip():
-                        st.markdown(f"""
-                        <div style="border-left: 4px solid #007bff; padding-left: 15px; margin: 15px 0; background-color: rgba(0, 123, 255, 0.05); border-radius: 5px;">
-                            <h5 style="color: #00aaff; margin-top: 5px; margin-bottom: 10px;">📍 Reference {i}</h5>
-                            <p style="margin: 0; line-height: 1.6; color: #e0e0e0; font-size: 16px;">{snippet}</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        context_info = [f'📂 Section: {ref.metadata.get("section")}' for key in ['section'] if ref.metadata.get(key)]
-                        if ref.metadata.get("page"): context_info.append(f'📄 Page: {ref.metadata.get("page")}')
-                        if ref.metadata.get("source_id"): context_info.append(f'🏷️ Source ID: {ref.metadata.get("source_id")}')
-                        if context_info:
-                            st.markdown(f"<small style='color: #888; font-style: italic; padding-left: 15px;'>{' | '.join(context_info)}</small>", unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div style="border-left: 4px solid #007bff; padding-left: 15px; margin: 15px 0; background-color: rgba(0, 123, 255, 0.05); border-radius: 5px;">
+                        <h5 style="color: #00aaff; margin-top: 5px; margin-bottom: 10px;">📍 Reference {i}</h5>
+                        <p style="margin: 0; line-height: 1.6; color: #e0e0e0; font-size: 16px;">{snippet}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                # --- Advanced Options Button Bar ---
+                # Advanced Options Button Bar
                 st.markdown("---")
-                st.markdown("### 📁 Advanced Access Options")
+                st.markdown("### 📁 Advanced Analysis & Access Options")
                 
-                col1, col2, col3 = st.columns(3)
+                col1, col2, col3, col4 = st.columns(4)
                 
                 with col1:
+                    if st.button(f"🤖 Generate AI Summary", key=f"summary_{hash(doc_path)}"):
+                        st.session_state[view_state_key] = 'summary' if st.session_state[view_state_key] != 'summary' else None
+                with col2:
                     if st.button(f"📖 Extract Key Paragraphs", key=f"paragraphs_{hash(doc_path)}"):
                         st.session_state[view_state_key] = 'paragraphs' if st.session_state[view_state_key] != 'paragraphs' else None
-                with col2:
-                    if os.path.exists(doc_path):
-                        with open(doc_path, 'rb') as f: file_data = f.read()
-                        st.download_button(
-                            label="💾 Download Full File", data=file_data, file_name=filename,
-                            mime="text/html" if doc_path.endswith('.html') else "text/plain",
-                            key=f"download_{hash(doc_path)}"
-                        )
                 with col3:
                     if st.button(f"📄 View Complete Content", key=f"fullcontent_{hash(doc_path)}"):
                         st.session_state[view_state_key] = 'content' if st.session_state[view_state_key] != 'content' else None
+                with col4:
+                    if os.path.exists(doc_path):
+                        with open(doc_path, 'rb') as f: file_data = f.read()
+                        st.download_button(label="💾 Download Full File", data=file_data, file_name=filename, mime="text/html", key=f"download_{hash(doc_path)}")
+
+                # Full-Width Display Area based on Session State
+                active_view = st.session_state.get(view_state_key)
+
+
+                if active_view == 'summary':
+                    with st.spinner("🤖 AI is reading and summarizing the document..."):
+                        if os.path.exists(doc_path):
+                            with open(doc_path, 'r', encoding='utf-8') as f: content = f.read()
+                            soup = BeautifulSoup(content, 'html.parser')
+                            clean_content = soup.get_text(strip=True)
+
+                            # Truncate content to fit model context window if necessary
+                            max_chars = 20000 # Approx 7k-8k tokens for Llama3 8b
+                            if len(clean_content) > max_chars:
+                                st.warning(f"⚠️ Document is very long. Summarizing the first {max_chars} characters.")
+                                clean_content = clean_content[:max_chars]
+
+                            summary_prompt = f"Please provide a concise, professional executive summary of the following financial document content. Focus on the most critical information, such as financial performance, key business segments, risk factors, and future outlook. Use bullet points for clarity.\n\nDOCUMENT CONTENT:\n\n{clean_content}"
+                            
+                            try:
+                                response = qual_brain.groq_client.chat.completions.create(
+                                    model=GROQ_LLM_MODEL,
+                                    messages=[{"role": "user", "content": summary_prompt}],
+                                    temperature=0.2
+                                )
+                                ai_summary = response.choices[0].message.content
+                                st.markdown("#### 🤖 AI-Generated Executive Summary")
+                                st.markdown(f'<div style="background-color: #1E293B; padding: 20px; border-radius: 8px; border: 1px solid #334155;">{ai_summary}</div>', unsafe_allow_html=True)
+                            except Exception as e:
+                                st.error(f"Could not generate AI summary: {e}")
+                        else:
+                            st.error("❌ File not found")
+
 
                 # --- Full-Width Display Area ---
-                if st.session_state[view_state_key] == 'paragraphs':
+                elif active_view == 'paragraphs':
                     with st.spinner("Extracting and cleaning relevant paragraphs..."):
                         if os.path.exists(doc_path):
                             with open(doc_path, 'r', encoding='utf-8') as f: content = f.read()
@@ -243,14 +272,35 @@ def display_enhanced_sources(sources, prompt=""):
                             else: st.info("💡 No highly relevant paragraphs found.")
                         else: st.error("❌ File not found")
                 
-                elif st.session_state[view_state_key] == 'content':
+                elif active_view == 'content':
                     if os.path.exists(doc_path):
-                        with open(doc_path, 'r', encoding='utf-8') as f: full_content = f.read()
-                        soup = BeautifulSoup(full_content, 'html.parser')
-                        clean_content = soup.get_text(separator='\n', strip=True)
-                        st.markdown("**📄 Complete File Content (Cleaned):**")
-                        st.text_area("", clean_content, height=400, key=f"content_area_{hash(doc_path)}")
-                    else: st.error("❌ File not found")
+                        with st.spinner("Loading and cleaning full document..."):
+                    
+                            with open(doc_path, 'r', encoding='utf-8') as f:
+                                full_content = f.read()
+                            
+                            # Use BeautifulSoup to get a clean text representation
+                            soup = BeautifulSoup(full_content, 'html.parser')
+                            clean_content = soup.get_text(separator='\n', strip=True)
+                            
+                            st.markdown("### 📄 Complete File Content (Raw Text)")
+
+                            # Use st.markdown with a styled <pre> tag for a code-block style view
+                            st.markdown(f"""
+                            <div style="background-color: #1a1a2e; 
+                                         border: 1px solid #3a3a5e; 
+                                         border-radius: 8px; 
+                                         padding: 15px; 
+                                         height: 500px; 
+                                         overflow-y: scroll; 
+                                         font-family: 'Courier New', Courier, monospace; 
+                                         color: #e0e0e0;
+                                         font-size: 0.9em;">
+                                <pre style="white-space: pre-wrap; margin: 0; word-wrap: break-word;">{clean_content}</pre>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.error("❌ File not found")
                         
                 # --- File Details ---
                 if os.path.exists(doc_path):
@@ -453,21 +503,33 @@ with tab_deep:
         with col1:
             if st.button("📊 Generate Financial Ratios Analysis", key="financial_ratios"):
                 with st.spinner("Calculating financial ratios..."):
-                    if financials_data.empty: st.warning("❌ No financial data available to calculate ratios.")
+                    if financials_data.empty:
+                        st.warning("❌ No financial data available to calculate ratios.")
                     else:
                         try:
-                            ratios_df = calculate_all_ratios(financials_data)
+                            # Unpack the ratios DataFrame AND the list of missing columns
+                            ratios_df, missing_cols = calculate_all_ratios(financials_data)
+                            
                             latest_valid_row = ratios_df.dropna(how='all', subset=ratios_df.columns.drop('Date')).head(1)
+                            
                             if not latest_valid_row.empty:
                                 st.success("✅ Financial Ratios Calculated Successfully!")
-                                latest_date = latest_valid_row['Date'].iloc[0].strftime('%Y-%m-%d')
-                                st.markdown(f"#### Latest Available Financial Ratios (as of {latest_date})")
+                                latest_date = latest_valid_row['Date'].iloc[0]
+                                st.markdown(f"#### Latest Available Financial Ratios (as of {pd.to_datetime(latest_date).strftime('%Y-%m-%d')})")
+                                
                                 display_df = latest_valid_row.set_index('Date').T
                                 st.dataframe(display_df.style.format("{:.2f}", na_rep="N/A"))
+
+                                # If there were missing columns, display a warning to the user
+                                if missing_cols:
+                                    st.warning(f"**Data Quality Alert:** Some ratios could not be calculated because the following data points were missing from the source financial statements: **{', '.join(missing_cols)}**")
+
                                 st.markdown("#### Ratio Trends Over Time")
                                 st.line_chart(ratios_df.set_index('Date')[['DebtToEquity', 'NetProfitMargin', 'ReturnOnEquity']])
-                            else: st.error("❌ Could not calculate any valid ratios from the available data.")
-                        except Exception as e: st.error(f"An error occurred during ratio calculation: {e}")
+                            else:
+                                st.error("❌ Could not calculate any valid ratios from the available data.")
+                        except Exception as e:
+                            st.error(f"An error occurred during ratio calculation: {e}")
 
         with col2:
             if st.button("📈 Generate Peer Comparison", key="peer_comparison"):

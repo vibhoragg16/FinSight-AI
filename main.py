@@ -4,6 +4,7 @@ import subprocess
 import logging
 import time
 from pathlib import Path
+import traceback
 
 # --- Setup Logging ---
 logging.basicConfig(
@@ -76,16 +77,19 @@ def run_processing():
     logging.info("Document processing finished.")
 
 def run_training():
-    """Runs the model training scripts."""
+    """Runs the model training scripts (WITH DEBUGGING)."""
     logging.info("Starting model training...")
     try:
         from src.models.train_model import train_all_models
         train_all_models()
         logging.info("Model training finished successfully.")
-    except ImportError:
-        logging.error("Could not import training modules. Please ensure 'src.models.train_model' exists.")
+    except ImportError as e:
+        # This will print the TRUE error message
+        logging.error("A deeper ImportError occurred. See details below:")
+        traceback.print_exc() # This prints the full error traceback
     except Exception as e:
         logging.error(f"An error occurred during model training: {e}")
+        traceback.print_exc()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
