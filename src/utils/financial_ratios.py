@@ -1,10 +1,17 @@
 import pandas as pd
 import numpy as np
 
+def _get_column(df, column_options):
+    """Helper function to find the first available column from a list of options."""
+    for col in column_options:
+        if col in df.columns:
+            return df[col]
+    return pd.Series(0, index=df.index) # Return a series of zeros if no column is found
+
 def calculate_all_ratios(financials_df):
     """
-    Calculates a comprehensive set of financial ratios from a DataFrame
-    of financial statement data. The input DataFrame should be pivoted.
+    Calculates a comprehensive set of financial ratios from a DataFrame.
+    This version is robust and checks for multiple common names for financial metrics.
     """
     if financials_df.empty:
         return pd.DataFrame()
@@ -13,29 +20,41 @@ def calculate_all_ratios(financials_df):
     if 'Date' in financials_df.columns:
         ratios['Date'] = financials_df['Date']
     
+    # --- Define data columns using the helper function for robustness ---
+    revenues = _get_column(financials_df, ['Revenues', 'totalRevenue', 'revenue'])
+    gross_profit = _get_column(financials_df, ['GrossProfit', 'grossProfit'])
+    op_income = _get_column(financials_df, ['OperatingIncome', 'operatingIncome'])
+    net_income = _get_column(financials_df, ['NetIncome', 'netIncome'])
+    
+    total_assets = _get_column(financials_df, ['TotalAssets', 'totalAssets'])
+    current_assets = _get_column(financials_df, ['CurrentAssets', 'totalCurrentAssets'])
+    inventory = _get_column(financials_df, ['Inventory', 'inventory'])
+    cash = _get_column(financials_df, ['Cash', 'cash', 'cashAndCashEquivalents'])
+    
+    total_liabilities = _get_column(financials_df, ['TotalLiabilities', 'totalLiab'])
+    current_liabilities = _get_column(financials_df, ['CurrentLiabilities', 'totalCurrentLiabilities'])
+    
+    equity = _get_column(financials_df, ['StockholdersEquity', 'totalStockholderEquity', 'totalEquity'])
+
     # --- Liquidity Ratios ---
-    if 'CurrentAssets' in financials_df and 'CurrentLiabilities' in financials_df:
-        ratios['CurrentRatio'] = financials_df['CurrentAssets'] / financials_df['CurrentLiabilities']
+    ratios['CurrentRatio'] = current_assets / current_liabilities
+    ratios['QuickRatio'] = (current_assets - inventory) / current_liabilities
     
     # --- Leverage Ratios ---
-    if 'TotalLiabilities' in financials_df and 'StockholdersEquity' in financials_df:
-        ratios['DebtToEquity'] = financials_df['TotalLiabilities'] / financials_df['StockholdersEquity']
-
-    # --- Profitability Ratios ---
-    if 'NetIncome' in financials_df and 'Revenues' in financials_df:
-        ratios['NetProfitMargin'] = financials_df['NetIncome'] / financials_df['Revenues']
+    ratios['DebtToEquity'] = total_liabilities / equity
+    ratios['DebtToAssets'] = total_liabilities / total_assets
     
-    if 'NetIncome' in financials_df and 'TotalAssets' in financials_df:
-        ratios['ReturnOnAssets'] = financials_df['NetIncome'] / financials_df['TotalAssets']
-        
-    if 'NetIncome' in financials_df and 'StockholdersEquity' in financials_df:
-        ratios['ReturnOnEquity'] = financials_df['NetIncome'] / financials_df['StockholdersEquity']
-
+    # --- Profitability Ratios ---
+    ratios['GrossProfitMargin'] = gross_profit / revenues
+    ratios['OperatingMargin'] = op_income / revenues
+    ratios['NetProfitMargin'] = net_income / revenues
+    ratios['ReturnOnAssets'] = net_income / total_assets
+    ratios['ReturnOnEquity'] = net_income / equity
+    
     # --- Efficiency Ratios ---
-    if 'Revenues' in financials_df and 'TotalAssets' in financials_df:
-        ratios['AssetTurnover'] = financials_df['Revenues'] / financials_df['TotalAssets']
+    ratios['AssetTurnover'] = revenues / total_assets
 
-    # Clean up any potential infinity values
+    # Clean up any potential infinity values from division by zero
     ratios = ratios.replace([np.inf, -np.inf], np.nan)
     
     return ratios
