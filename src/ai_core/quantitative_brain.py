@@ -10,23 +10,32 @@ from src.features.build_features import prepare_features_for_prediction
 from src.utils.financial_ratios import calculate_all_ratios
 from src.utils.config import MODEL_SAVE_PATH as MODELS_PATH
 
+import streamlit as st
+from huggingface_hub import hf_hub_download
+
+@st.cache_resource
+def load_predictor_from_hub(repo_id, filename):
+    """Downloads the main predictor model from Hugging Face Hub."""
+    try:
+        model_path = hf_hub_download(repo_id=repo_id, filename=filename)
+        return joblib.load(model_path)
+    except Exception as e:
+        logging.error(f"Failed to load predictor model: {e}")
+        st.error("Stock predictor model could not be loaded.")
+        return None
+
+
 class QuantitativeBrain:
     """
     A high-level coordinator for all quantitative analysis. It uses specialized
     models for scoring, prediction, and feature engineering.
     """
     def __init__(self):
-        """Initializes the QuantitativeBrain with its models."""
+        """Initializes the QuantitativeBrain with its models from Hugging Face Hub."""
         self.health_scorer = PCAHealthScorer()
-        
-        try:
-            # This correctly loads the trained stock predictor model
-            model_path = os.path.join(MODELS_PATH, 'stock_predictor_model.pkl')
-            self.predictor = joblib.load(model_path)
-            logging.info("QuantitativeBrain initialized with trained stock predictor.")
-        except FileNotFoundError:
-            logging.error("Stock predictor model not found. Please run the training script.")
-            self.predictor = None
+        self.predictor = load_predictor_from_hub(repo_id=HF_REPO_ID, filename="models/saved/stock_predictor_model.pkl")
+        if self.predictor:
+            logging.info("QuantitativeBrain initialized with stock predictor from Hugging Face Hub.")
 
     def get_analysis(self, market_data, financials_data, news_sentiment, ticker: str | None = None):
             """
@@ -66,4 +75,5 @@ class QuantitativeBrain:
                 'prediction': prediction,
                 'confidence': confidence,
                 'news_sentiment': news_sentiment
+
             }
