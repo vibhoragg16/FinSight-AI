@@ -69,29 +69,27 @@ def _file_mtime(path: str) -> float:
         return 0.0
 
 @st.cache_data(ttl=3600)
-def load_company_data(ticker, market_sig: float, news_sig: float, fin_sig: float):
+def load_company_data(ticker):
+    """Loads all necessary data for a given ticker from Hugging Face Hub."""
     market_df = load_csv_from_hub(HF_REPO_ID, f"data/market_data/{ticker}_market_data.csv")
-    news_df = load_json_from_hub(HF_REPO_ID, f"data/news/{ticker}_news.json")
+    news_df_raw = load_json_from_hub(HF_REPO_ID, f"data/news/{ticker}_news.json")
     financials_df = load_csv_from_hub(HF_REPO_ID, f"data/processed/{ticker}/{ticker}_financials_quarterly.csv")
+    
+    # --- Data Processing ---
     if not market_df.empty:
         market_df['Date'] = pd.to_datetime(market_df['Date'], utc=True, errors='coerce').dt.tz_convert(None)
-    # Normalize news JSON to a flat dataframe to avoid caching hash issues
-    news_df = pd.read_json(news_file) if os.path.exists(news_file) else pd.DataFrame()
-    if not news_df.empty and 'articles' in news_df:
+    
+    news_df = pd.DataFrame()
+    if not news_df_raw.empty and 'articles' in news_df_raw:
         try:
-            articles_df = pd.json_normalize(news_df['articles'])
+            articles_df = pd.json_normalize(news_df_raw['articles'])
             if 'publishedAt' in articles_df:
                 articles_df['publishedAt'] = pd.to_datetime(articles_df['publishedAt'], utc=True, errors='coerce').dt.tz_convert(None)
             news_df = articles_df
         except Exception as e:
-            logging.error(f"Error normalizing news data: {e}")
-    # Fetch financials for health scoring
-    financials_df = fetch_financials_dataframe(ticker)
+            logging.error(f"Error normalizing news data for {ticker}: {e}")
+            
     return market_df, news_df, financials_df
-
-_market_file = os.path.join(MARKET_DATA_PATH, f'{selected_company}_market_data.csv')
-_news_file = os.path.join(NEWS_DATA_PATH, f'{selected_company}_news.json')
-_fin_file = os.path.join(os.environ.get('PROCESSED_DATA_PATH', 'data/processed'), selected_company, f'{selected_company}_financials_quarterly.csv')
 
 market_data, news_data, financials_data = load_company_data(selected_company)
 # --- AI Analysis ---
@@ -568,4 +566,5 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
