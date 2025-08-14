@@ -7,9 +7,10 @@ import sys
 import logging
 import re
 from bs4 import BeautifulSoup
+from huggingface_hub import hf_hub_download
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
-from src.utils.config import TARGET_COMPANIES, MARKET_DATA_PATH, NEWS_DATA_PATH, GROQ_LLM_MODEL
+from src.utils.config import TARGET_COMPANIES, MARKET_DATA_PATH, NEWS_DATA_PATH, GROQ_LLM_MODEL, HF_REPO_ID
 from src.rag.query_processor import query_rag_system
 from src.ai_core.qualitative_brain import QualitativeBrain
 from src.ai_core.quantitative_brain import QuantitativeBrain
@@ -25,6 +26,24 @@ def load_css(file_name):
         with open(file_name) as f:
             st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 load_css('src/dashboard/components/style.css')
+
+@st.cache_data(ttl=3600) # Cache for 1 hour
+def load_csv_from_hub(repo_id, filename):
+    try:
+        file_path = hf_hub_download(repo_id=repo_id, filename=filename)
+        return pd.read_csv(file_path)
+    except Exception as e:
+        logging.error(f"Failed to load CSV {filename}: {e}")
+        return pd.DataFrame()
+
+@st.cache_data(ttl=3600)
+def load_json_from_hub(repo_id, filename):
+    try:
+        file_path = hf_hub_download(repo_id=repo_id, filename=filename)
+        return pd.read_json(file_path)
+    except Exception as e:
+        logging.error(f"Failed to load JSON {filename}: {e}")
+        return pd.DataFrame()
 
 # --- App State & Initialization ---
 @st.cache_resource
@@ -51,9 +70,9 @@ def _file_mtime(path: str) -> float:
 
 @st.cache_data(ttl=3600)
 def load_company_data(ticker, market_sig: float, news_sig: float, fin_sig: float):
-    market_file = os.path.join(MARKET_DATA_PATH, f'{ticker}_market_data.csv')
-    news_file = os.path.join(NEWS_DATA_PATH, f'{ticker}_news.json')
-    market_df = pd.read_csv(market_file) if os.path.exists(market_file) else pd.DataFrame()
+    market_df = load_csv_from_hub(HF_REPO_ID, f"data/market_data/{ticker}_market_data.csv")
+    news_df = load_json_from_hub(HF_REPO_ID, f"data/news/{ticker}_news.json")
+    financials_df = load_csv_from_hub(HF_REPO_ID, f"data/processed/{ticker}/{ticker}_financials_quarterly.csv")
     if not market_df.empty:
         market_df['Date'] = pd.to_datetime(market_df['Date'], utc=True, errors='coerce').dt.tz_convert(None)
     # Normalize news JSON to a flat dataframe to avoid caching hash issues
@@ -74,13 +93,7 @@ _market_file = os.path.join(MARKET_DATA_PATH, f'{selected_company}_market_data.c
 _news_file = os.path.join(NEWS_DATA_PATH, f'{selected_company}_news.json')
 _fin_file = os.path.join(os.environ.get('PROCESSED_DATA_PATH', 'data/processed'), selected_company, f'{selected_company}_financials_quarterly.csv')
 
-market_data, news_data, financials_data = load_company_data(
-    selected_company,
-    _file_mtime(_market_file),
-    _file_mtime(_news_file),
-    _file_mtime(_fin_file),
-)
-
+market_data, news_data, financials_data = load_company_data(selected_company)
 # --- AI Analysis ---
 @st.cache_data(ttl=3600)
 def run_ai_analysis(ticker, market_df, news_df, financials_df):
@@ -555,3 +568,4 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
