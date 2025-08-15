@@ -319,7 +319,6 @@ def display_enhanced_sources(sources, prompt=""):
                                     st.info(para)
                             else:
                                 st.info("💡 No highly relevant paragraphs found based on your query.")
-
                 # --- Full-Width Display Area ---
                 elif active_view == 'paragraphs':
                     with st.spinner("Extracting and cleaning relevant paragraphs..."):
@@ -621,6 +620,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
