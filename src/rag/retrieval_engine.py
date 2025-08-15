@@ -4,7 +4,7 @@ import os
 import logging
 import streamlit as st
 from huggingface_hub import snapshot_download
-from langchain_chroma import Chroma  # Updated import
+from langchain_chroma import Chroma
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 from src.utils.config import VECTOR_STORE_PATH, EMBEDDING_MODEL_NAME, HF_REPO_ID
 
@@ -35,32 +35,22 @@ def download_and_load_vector_store(repo_id, local_dir_base, company_ticker):
             return None
     
     # Step 2: Load the vector store from the (now guaranteed) local path
-    # FIX: Initialize embeddings *before* the try block
-    embeddings = SentenceTransformerEmbeddings(model_name=EMBEDDING_MODEL_NAME)
     try:
+        # Use the correct, modern embeddings class
+        embeddings = SentenceTransformerEmbeddings(model_name=EMBEDDING_MODEL_NAME)
         vector_store = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
         logging.info(f"Successfully loaded vector store for {company_ticker}.")
         return vector_store
     except Exception as e:
         logging.error(f"Failed to load vector store from {persist_directory}: {e}")
-        # Try alternative ChromaDB initialization
-        try:
-            import chromadb
-            client = chromadb.PersistentClient(path=persist_directory)
-            vector_store = Chroma(client=client, embedding_function=embeddings)
-            logging.info(f"Successfully loaded vector store for {company_ticker} using alternative method.")
-            return vector_store
-        except Exception as e2:
-            logging.error(f"Alternative method also failed: {e2}")
-            return None
-            
+        return None
+
 class RetrievalEngine:
     """
     Handles the retrieval of documents from the vector store using local embeddings.
     """
     def __init__(self, company_ticker):
         self.company_ticker = company_ticker
-        # This single function call now handles both downloading and loading the store.
         self.vector_store = download_and_load_vector_store(
             repo_id=HF_REPO_ID,
             local_dir_base=VECTOR_STORE_PATH,
@@ -80,4 +70,3 @@ class RetrievalEngine:
         except Exception as e:
             logging.error(f"Error during document retrieval for {self.company_ticker}: {e}")
             return []
-
