@@ -320,7 +320,7 @@ def display_enhanced_sources(sources, prompt=""):
                             else:
                                 st.info("💡 No highly relevant paragraphs found based on your query.")
                 # --- Full-Width Display Area ---
-                elif active_view == 'paragraphs':
+            elif active_view == 'paragraphs':
                     with st.spinner("Extracting and cleaning relevant paragraphs..."):
                         if os.path.exists(doc_path):
                             with open(doc_path, 'r', encoding='utf-8') as f: content = f.read()
@@ -337,7 +337,7 @@ def display_enhanced_sources(sources, prompt=""):
                             else: st.info("💡 No highly relevant paragraphs found.")
                         else: st.error("❌ File not found")
                 
-                elif active_view == 'content':
+            elif active_view == 'content':
                     if os.path.exists(doc_path):
                         with st.spinner("Loading and cleaning full document..."):
                     
@@ -364,7 +364,7 @@ def display_enhanced_sources(sources, prompt=""):
                                 <pre style="white-space: pre-wrap; margin: 0; word-wrap: break-word;">{clean_content}</pre>
                             </div>
                             """, unsafe_allow_html=True)
-                    else:
+                else:
                         st.error("❌ File not found")
                         
                 # --- File Details ---
@@ -620,6 +620,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
