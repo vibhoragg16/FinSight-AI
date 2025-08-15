@@ -364,7 +364,7 @@ def display_enhanced_sources(sources, prompt=""):
                                 <pre style="white-space: pre-wrap; margin: 0; word-wrap: break-word;">{clean_content}</pre>
                             </div>
                             """, unsafe_allow_html=True)
-                else:
+            else:
                         st.error("❌ File not found")
                         
                 # --- File Details ---
@@ -620,6 +620,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
