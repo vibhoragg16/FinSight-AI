@@ -73,7 +73,24 @@ def load_json_from_hub(repo_id, filename):
     except Exception as e:
         logging.error(f"Failed to load JSON {filename}: {e}")
         return pd.DataFrame()
+        
+@st.cache_data(ttl=3600)
+def get_filing_content_from_hub(ticker, filename):
+    """Downloads a raw filing file from HF Hub and returns its content."""
+    try:
+        # Construct the path as it exists in the HF repo
+        repo_file_path = f"data/raw/sec-edgar-filings/{ticker}/{filename.split('/')[0]}/{filename.split('/')[1]}"
 
+        file_path = hf_hub_download(
+            repo_id=HF_REPO_ID,
+            filename=repo_file_path,
+            repo_type="dataset"
+        )
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        logging.error(f"Failed to load filing {filename} for {ticker}: {e}")
+        return None
 # Add this to your streamlit_app.py to replace the current init_brains function
 
 @st.cache_resource
@@ -213,114 +230,95 @@ def extract_relevant_paragraphs(content, query_keywords, max_paragraphs=3):
 
 def display_enhanced_sources(sources, prompt=""):
     """
-    Enhanced source display with direct content access, full-width views,
-    and AI-powered analysis capabilities.
+    Displays sources and re-enables advanced analysis by fetching full 
+    document content on-demand from Hugging Face Hub.
     """
     st.markdown("---")
-    st.markdown("""
-    <div style="padding: 15px; background: linear-gradient(90deg, #28a745 0%, #20c997 100%); border-radius: 8px; margin: 20px 0;">
-    <h3 style="color: white; margin: 0; text-align: center;">📚 Sources & Direct Access</h3>
-    <p style="color: white; margin: 10px 0 0 0; text-align: center; opacity: 0.9;">
-    Direct links, full content, and AI-powered analysis of official sources
-    </p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("### 📚 Sources & Direct Access")
 
+    if not sources:
+        st.info("No specific document sources were found for this answer.")
+        return
+
+    # Group sources by the document they came from
     doc_sources = {}
     for s in sources:
-        doc_key = s.metadata.get("source", "Unknown")
-        if doc_key not in doc_sources:
-            doc_sources[doc_key] = []
-        doc_sources[doc_key].append(s)
+        source_path = s.metadata.get("source", "Unknown")
+        if source_path == "Unknown":
+            continue
+        
+        parts = source_path.split(os.sep)
+        if 'sec-edgar-filings' in parts:
+            # Create a unique key like: AAPL/10-K/0000320193-23-000106/primary-document.html
+            key_parts = parts[parts.index('sec-edgar-filings')+1:]
+            doc_key = "/".join(key_parts)
+            
+            if doc_key not in doc_sources:
+                doc_sources[doc_key] = []
+            doc_sources[doc_key].append(s.page_content)
 
     query_keywords = prompt.lower().split() if prompt else []
 
-    for doc_path, doc_refs in doc_sources.items():
-        if doc_path != "Unknown":
-            # Initialize a session state for each document expander to manage views
-            view_state_key = f'active_view_{hash(doc_path)}'
-            st.session_state.setdefault(view_state_key, None)
+    for doc_key, snippets in doc_sources.items():
+        view_state_key = f'active_view_{hash(doc_key)}'
+        st.session_state.setdefault(view_state_key, None)
+        
+        # Extract ticker and filename for display and fetching
+        key_parts = doc_key.split('/')
+        ticker_from_key = key_parts[0]
+        filename_for_display = " / ".join(key_parts[1:])
+        filename_for_download = "/".join(key_parts[1:])
 
-            filename = os.path.basename(doc_path)
-            doc_type = "SEC Filing" if doc_path.endswith('.html') else "Financial Data"
+        with st.expander(f"📄 **{filename_for_display}**", expanded=True):
+            sec_link = get_sec_link(os.path.basename(doc_key), ticker_from_key)
+            if sec_link:
+                st.markdown(f'**Source:** <a href="{sec_link}" target="_blank">View on SEC EDGAR</a>', unsafe_allow_html=True)
             
-            with st.expander(f"📄 {filename} - {doc_type}", expanded=True):
-                # Header Information (SEC Link, etc.)
-                filing_type = None
-                if doc_path.endswith('.html'):
-                    if '10-k' in filename.lower(): filing_type = "10-K Annual Report"
-                    elif '10-q' in filename.lower(): filing_type = "10-Q Quarterly Report"
-                    elif '8-k' in filename.lower(): filing_type = "8-K Current Report"
-                sec_link = get_sec_link(filename, selected_company)
-                if filing_type:
-                    st.markdown(f'<div style="padding: 12px; background-color: #007bff; color: white; border-radius: 5px; margin-bottom: 15px;"><strong>📋 {filing_type.upper()}</strong></div>', unsafe_allow_html=True)
-                if sec_link:
-                    st.markdown(f'<div style="padding: 15px; background-color: #e3f2fd; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2196f3;"><h4 style="margin: 0 0 10px 0; color: #1976d2;">🔗 Direct SEC EDGAR Link</h4><a href="{sec_link}" target="_blank" style="color: #1976d2; text-decoration: none; font-weight: bold;">📊 View Official Filing on SEC.gov</a></div>', unsafe_allow_html=True)
+            st.markdown("---")
+            st.markdown("**Relevant Excerpts Found:**")
+            for snippet in snippets:
+                st.markdown(f"> _{snippet}_")
 
-                # Initial Relevant Snippets
-                st.markdown("### 📝 Relevant Content from This Document")
-                for i, ref in enumerate(doc_refs, 1):
-                    snippet = ref.page_content
-                    st.markdown(f"""
-                    <div style="border-left: 4px solid #007bff; padding-left: 15px; margin: 15px 0; background-color: rgba(0, 123, 255, 0.05); border-radius: 5px;">
-                        <h5 style="color: #00aaff; margin-top: 5px; margin-bottom: 10px;">📍 Reference {i}</h5>
-                        <p style="margin: 0; line-height: 1.6; color: #e0e0e0; font-size: 16px;">{snippet}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+            # Advanced Options
+            st.markdown("---")
+            st.markdown("##### Advanced Analysis")
+            col1, col2, col3 = st.columns(3)
 
-                # Advanced Options Button Bar
-                st.markdown("---")
-                st.markdown("### 📁 Advanced Analysis & Access Options")
-                
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    if st.button(f"🤖 Generate AI Summary", key=f"summary_{hash(doc_path)}"):
-                        st.session_state[view_state_key] = 'summary' if st.session_state[view_state_key] != 'summary' else None
-                with col2:
-                    if st.button(f"📖 Extract Key Paragraphs", key=f"paragraphs_{hash(doc_path)}"):
-                        st.session_state[view_state_key] = 'paragraphs' if st.session_state[view_state_key] != 'paragraphs' else None
-                with col3:
-                    if st.button(f"📄 View Complete Content", key=f"fullcontent_{hash(doc_path)}"):
-                        st.session_state[view_state_key] = 'content' if st.session_state[view_state_key] != 'content' else None
-                with col4:
-                    if os.path.exists(doc_path):
-                        with open(doc_path, 'rb') as f: file_data = f.read()
-                        st.download_button(label="💾 Download Full File", data=file_data, file_name=filename, mime="text/html", key=f"download_{hash(doc_path)}")
+            if col1.button("🤖 Generate AI Summary", key=f"summary_{doc_key}"):
+                st.session_state[view_state_key] = 'summary' if st.session_state[view_state_key] != 'summary' else None
+            if col2.button("📖 View Complete Content", key=f"full_{doc_key}"):
+                st.session_state[view_state_key] = 'content' if st.session_state[view_state_key] != 'content' else None
+            if col3.button("🎯 Extract Key Paragraphs", key=f"para_{doc_key}"):
+                st.session_state[view_state_key] = 'paragraphs' if st.session_state[view_state_key] != 'paragraphs' else None
+            
+            active_view = st.session_state.get(view_state_key)
+            if active_view:
+                with st.spinner("Fetching and processing full document from the data hub..."):
+                    content = get_filing_content_from_hub(ticker_from_key, filename_for_download)
 
-                # Full-Width Display Area based on Session State
-                active_view = st.session_state.get(view_state_key)
-
-
-                if active_view == 'summary':
-                    with st.spinner("🤖 AI is reading and summarizing the document..."):
-                        if os.path.exists(doc_path):
-                            with open(doc_path, 'r', encoding='utf-8') as f: content = f.read()
+                    if not content:
+                        st.error("Could not retrieve the full document content.")
+                    else:
+                        if active_view == 'summary':
                             soup = BeautifulSoup(content, 'html.parser')
-                            clean_content = soup.get_text(strip=True)
+                            clean_content = soup.get_text(strip=True)[:20000] # Truncate for performance
+                            summary_prompt = f"Please provide a concise, professional executive summary of the following financial document content. Focus on financial performance, key business segments, risk factors, and future outlook. Use bullet points.\n\nDOCUMENT CONTENT:\n\n{clean_content}"
+                            response = qual_brain.groq_client.chat.completions.create(model=GROQ_LLM_MODEL, messages=[{"role": "user", "content": summary_prompt}], temperature=0.2)
+                            ai_summary = response.choices[0].message.content
+                            st.markdown(f'<div style="background-color: #1E293B; padding: 20px; border-radius: 8px;">{ai_summary}</div>', unsafe_allow_html=True)
 
-                            # Truncate content to fit model context window if necessary
-                            max_chars = 20000 # Approx 7k-8k tokens for Llama3 8b
-                            if len(clean_content) > max_chars:
-                                st.warning(f"⚠️ Document is very long. Summarizing the first {max_chars} characters.")
-                                clean_content = clean_content[:max_chars]
-
-                            summary_prompt = f"Please provide a concise, professional executive summary of the following financial document content. Focus on the most critical information, such as financial performance, key business segments, risk factors, and future outlook. Use bullet points for clarity.\n\nDOCUMENT CONTENT:\n\n{clean_content}"
+                        elif active_view == 'content':
+                            soup = BeautifulSoup(content, 'html.parser')
+                            clean_content = soup.get_text(separator='\n', strip=True)
+                            st.code(clean_content, language=None)
                             
-                            try:
-                                response = qual_brain.groq_client.chat.completions.create(
-                                    model=GROQ_LLM_MODEL,
-                                    messages=[{"role": "user", "content": summary_prompt}],
-                                    temperature=0.2
-                                )
-                                ai_summary = response.choices[0].message.content
-                                st.markdown("#### 🤖 AI-Generated Executive Summary")
-                                st.markdown(f'<div style="background-color: #1E293B; padding: 20px; border-radius: 8px; border: 1px solid #334155;">{ai_summary}</div>', unsafe_allow_html=True)
-                            except Exception as e:
-                                st.error(f"Could not generate AI summary: {e}")
-                        else:
-                            st.error("❌ File not found")
-
+                        elif active_view == 'paragraphs':
+                            relevant_paragraphs = extract_relevant_paragraphs(content, query_keywords)
+                            if relevant_paragraphs:
+                                for para in relevant_paragraphs:
+                                    st.info(para)
+                            else:
+                                st.info("💡 No highly relevant paragraphs found based on your query.")
 
                 # --- Full-Width Display Area ---
                 elif active_view == 'paragraphs':
@@ -623,6 +621,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
