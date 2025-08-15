@@ -143,3 +143,4 @@ class QualitativeBrain:
                 "summary": "Could not perform detailed analysis."
             }
 
+
