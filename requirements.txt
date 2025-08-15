@@ -6,48 +6,49 @@ xgboost
 joblib
 
 # Data Collection
-yfinance==0.2.18
-sec-edgar-downloader==5.0.1
-requests==2.31.0
-newsapi-python==0.2.6
+yfinance
+sec-edgar-downloader
+requests
+newsapi-python
 # Technical Analysis library for market data
-ta==0.10.2
+ta
 
 # Document Processing & RAG
 langchain
 langchain-groq
 langchain-community
-langchain-chroma==0.1.0
-pypdf==3.12.0
-pymupdf==1.23.3
-chromadb==0.4.24
-sentence-transformers==2.2.2
+langchain-chroma
+pypdf
+pymupdf
+chromadb
+sentence-transformers
 # Vector store for RAG
-faiss-cpu==1.7.4
+faiss-cpu
 # For Table Extraction from PDFs
-camelot-py[cv]==0.10.1
-opencv-python-headless==4.8.0.76
+camelot-py[cv]
+opencv-python-headless
 
 # AI & NLP
 groq
-transformers==4.30.2
-torch==2.0.1
-textblob==0.17.1
+transformers
+torch
+textblob
 # For sentence tokenization in some environments
-nltk==3.8.1
+nltk
 
 # Dashboard
 streamlit
-plotly==5.15.0
+plotly
 
 # Utilities
-python-dotenv==1.0.0
-schedule==1.2.0
-unstructured==0.10.15
-beautifulsoup4==4.12.2
+python-dotenv
+schedule
+unstructured
+beautifulsoup4
 huggingface_hub
 
 # CRITICAL: SQLite fix for ChromaDB
 pysqlite3-binary==0.5.2.post2
+
 
 
