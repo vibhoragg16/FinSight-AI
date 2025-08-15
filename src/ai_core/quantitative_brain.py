@@ -33,7 +33,7 @@ class QuantitativeBrain:
     def __init__(self):
         """Initializes the QuantitativeBrain with its models from Hugging Face Hub."""
         self.health_scorer = PCAHealthScorer()
-        self.predictor = load_predictor_from_hub(repo_id=HF_REPO_ID, filename="stock_predictor_model.pkl")
+        self.predictor = load_predictor_from_hub(repo_id=HF_REPO_ID, filename="models/saved/stock_predictor_model.pkl")
         if self.predictor:
             logging.info("QuantitativeBrain initialized with stock predictor from Hugging Face Hub.")
 
@@ -77,6 +77,7 @@ class QuantitativeBrain:
                 'news_sentiment': news_sentiment
 
             }
+
 
 
 
