@@ -29,7 +29,7 @@ camelot-py[cv]==0.10.1
 opencv-python-headless==4.8.0.76
 
 # AI & NLP
-groq==0.8.0
+groq
 transformers==4.30.2
 torch==2.0.1
 textblob==0.17.1
@@ -49,3 +49,4 @@ huggingface_hub==0.16.4
 
 # CRITICAL: SQLite fix for ChromaDB
 pysqlite3-binary==0.5.2.post2
+
