@@ -35,8 +35,9 @@ def download_and_load_vector_store(repo_id, local_dir_base, company_ticker):
             return None
     
     # Step 2: Load the vector store from the (now guaranteed) local path
+    # FIX: Initialize embeddings *before* the try block
+    embeddings = SentenceTransformerEmbeddings(model_name=EMBEDDING_MODEL_NAME)
     try:
-        embeddings = SentenceTransformerEmbeddings(model_name=EMBEDDING_MODEL_NAME)
         vector_store = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
         logging.info(f"Successfully loaded vector store for {company_ticker}.")
         return vector_store
@@ -52,7 +53,7 @@ def download_and_load_vector_store(repo_id, local_dir_base, company_ticker):
         except Exception as e2:
             logging.error(f"Alternative method also failed: {e2}")
             return None
-
+            
 class RetrievalEngine:
     """
     Handles the retrieval of documents from the vector store using local embeddings.
@@ -79,3 +80,4 @@ class RetrievalEngine:
         except Exception as e:
             logging.error(f"Error during document retrieval for {self.company_ticker}: {e}")
             return []
+
