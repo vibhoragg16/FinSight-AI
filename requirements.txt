@@ -1,54 +1,52 @@
 # Core & Data Science
-pandas
-numpy
-scikit-learn
-xgboost
-joblib
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.5.0
+xgboost==2.0.3
+joblib==1.4.2
 
 # Data Collection
-yfinance
-sec-edgar-downloader
-requests
-newsapi-python
+yfinance==0.2.40
+sec-edgar-downloader==5.0.1
+requests==2.32.3
+newsapi-python==0.2.6
 # Technical Analysis library for market data
-ta
+ta==0.10.2
 
 # Document Processing & RAG
-langchain
-langchain-groq
-langchain-community
-langchain-chroma
-pypdf
-pymupdf
-chromadb
-sentence-transformers
+langchain==0.1.16
+langchain-groq==0.1.3
+langchain-community==0.0.32
+langchain-chroma==0.1.0
+pypdf==4.2.0
+pymupdf==1.24.5
+chromadb==0.5.0
+sentence-transformers==2.7.0
 # Vector store for RAG
-faiss-cpu
+faiss-cpu==1.8.0
 # For Table Extraction from PDFs
-camelot-py[cv]
-opencv-python-headless
+camelot-py[cv]==0.11.0
+opencv-python-headless==4.9.0.80
 
 # AI & NLP
-groq
-transformers
-torch
-textblob
+groq==0.9.0
+transformers==4.41.2
+torch==2.1.2
+textblob==0.18.0.post0
 # For sentence tokenization in some environments
-nltk
+nltk==3.8.1
 
 # Dashboard
-streamlit
-plotly
+streamlit==1.37.0
+plotly==5.22.0
 
 # Utilities
-python-dotenv
-schedule
-unstructured
-beautifulsoup4
-huggingface_hub
+python-dotenv==1.0.1
+schedule==1.2.2
+unstructured==0.14.5
+beautifulsoup4==4.12.3
+huggingface_hub==0.23.3
 
 # CRITICAL: SQLite fix for ChromaDB
-pysqlite3-binary==0.5.2.post2
-
-
-
+pypdf2==3.0.1
+pysqlite3-binary==0.5.3
