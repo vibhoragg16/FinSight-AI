@@ -2,7 +2,7 @@ import logging
 from groq import Groq
 from langchain_groq import ChatGroq
 from langchain.chains import RetrievalQA
-from langchain_community.vectorstores import FAISS
+from langchain_chroma import Chroma  # Updated import
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 from src.rag.retrieval_engine import RetrievalEngine
 from src.utils.config import GROQ_API_KEY, GROQ_LLM_MODEL, EMBEDDING_MODEL_NAME
@@ -56,7 +56,8 @@ def query_rag_system(company_ticker, query):
     
     try:
         embeddings = SentenceTransformerEmbeddings(model_name=EMBEDDING_MODEL_NAME)
-        temp_retriever = FAISS.from_documents(list(unique_docs), embeddings).as_retriever()
+        # Use the updated Chroma import
+        temp_retriever = Chroma.from_documents(list(unique_docs), embeddings).as_retriever()
         qa_chain = RetrievalQA.from_chain_type(
             llm=llm,
             chain_type="stuff",
