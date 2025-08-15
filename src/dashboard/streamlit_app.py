@@ -30,7 +30,7 @@ load_css('src/dashboard/components/style.css')
 @st.cache_data(ttl=3600) # Cache for 1 hour
 def load_csv_from_hub(repo_id, filename):
     try:
-        file_path = hf_hub_download(repo_id=repo_id, filename=filename)
+        file_path = hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
         return pd.read_csv(file_path)
     except Exception as e:
         logging.error(f"Failed to load CSV {filename}: {e}")
@@ -39,7 +39,7 @@ def load_csv_from_hub(repo_id, filename):
 @st.cache_data(ttl=3600)
 def load_json_from_hub(repo_id, filename):
     try:
-        file_path = hf_hub_download(repo_id=repo_id, filename=filename)
+        file_path = hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
         return pd.read_json(file_path)
     except Exception as e:
         logging.error(f"Failed to load JSON {filename}: {e}")
@@ -566,6 +566,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
