@@ -15,23 +15,14 @@ class QualitativeBrain:
         if not GROQ_API_KEY:
             raise ValueError("GROQ_API_KEY not found. Please set it in your environment variables or .env file.")
         
-        # Initialize Groq client with minimal arguments to avoid compatibility issues
+        # This is the corrected, simplified initialization.
         try:
             self.groq_client = Groq(api_key=GROQ_API_KEY)
             logging.info("QualitativeBrain initialized successfully with Groq client.")
         except Exception as e:
             logging.error(f"Failed to initialize Groq client: {e}")
-            # Fallback initialization attempt
-            try:
-                self.groq_client = Groq(
-                    api_key=GROQ_API_KEY,
-                    # Remove any problematic parameters
-                )
-                logging.info("QualitativeBrain initialized with fallback method.")
-            except Exception as e2:
-                logging.error(f"Fallback initialization also failed: {e2}")
-                raise ValueError(f"Could not initialize Groq client: {e2}")
-                
+            raise ValueError(f"Could not initialize Groq client: {e}")
+            
     def analyze_text_sentiment(self, text):
         """
         Analyzes the sentiment of a given text using TextBlob as a fallback
@@ -142,5 +133,6 @@ class QualitativeBrain:
                 "key_points": ["Analysis unavailable due to API error"],
                 "summary": "Could not perform detailed analysis."
             }
+
 
 
