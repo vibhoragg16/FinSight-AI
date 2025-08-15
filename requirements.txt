@@ -1,6 +1,6 @@
 # Core & Data Science
 pandas
-numpy
+numpy==1.26.4
 scikit-learn
 xgboost
 joblib
@@ -49,3 +49,4 @@ huggingface_hub
 
 # CRITICAL: SQLite fix for ChromaDB
 pysqlite3-binary==0.5.2.post2
+
