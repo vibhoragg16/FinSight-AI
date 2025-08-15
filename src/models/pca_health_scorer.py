@@ -15,7 +15,7 @@ from src.utils.config import HF_REPO_ID
 def load_model_from_hub(repo_id, filename):
     """Downloads a model from Hugging Face Hub and caches it."""
     try:
-        model_path = hf_hub_download(repo_id=repo_id, filename=filename)
+        model_path = hf_hub_download(repo_id=repo_id, filename=filename,repo_type="dataset")
         return joblib.load(model_path)
     except Exception as e:
         logging.error(f"Failed to load model {filename} from {repo_id}: {e}")
@@ -106,5 +106,6 @@ class PCAHealthScorer:
         # Weighted blend
         score = 0.30 * cr_score + 0.25 * dte_score + 0.30 * roe_score + 0.15 * roa_score
         return float(round(score, 1))
+
 
 
