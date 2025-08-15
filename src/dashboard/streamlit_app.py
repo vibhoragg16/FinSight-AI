@@ -319,67 +319,6 @@ def display_enhanced_sources(sources, prompt=""):
                                     st.info(para)
                             else:
                                 st.info("💡 No highly relevant paragraphs found based on your query.")
-                # --- Full-Width Display Area ---
-            elif active_view == 'paragraphs':
-                    with st.spinner("Extracting and cleaning relevant paragraphs..."):
-                        if os.path.exists(doc_path):
-                            with open(doc_path, 'r', encoding='utf-8') as f: content = f.read()
-                            relevant_paragraphs = extract_relevant_paragraphs(content, query_keywords)
-                            if relevant_paragraphs:
-                                st.markdown("**🎯 Most Relevant Paragraphs:**")
-                                for j, para in enumerate(relevant_paragraphs, 1):
-                                    st.markdown(f"""
-                                    <div style="padding: 15px; background-color: rgba(255, 193, 7, 0.1); color: #e0e0e0; border-radius: 5px; margin: 10px 0; border-left: 4px solid #ffc107;">
-                                        <strong style="color: #ffc107;">Paragraph {j}:</strong>
-                                        <div style="line-height: 1.6; margin-top: 8px;">{para}</div>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                            else: st.info("💡 No highly relevant paragraphs found.")
-                        else: st.error("❌ File not found")
-                
-            elif active_view == 'content':
-                    if os.path.exists(doc_path):
-                        with st.spinner("Loading and cleaning full document..."):
-                    
-                            with open(doc_path, 'r', encoding='utf-8') as f:
-                                full_content = f.read()
-                            
-                            # Use BeautifulSoup to get a clean text representation
-                            soup = BeautifulSoup(full_content, 'html.parser')
-                            clean_content = soup.get_text(separator='\n', strip=True)
-                            
-                            st.markdown("### 📄 Complete File Content (Raw Text)")
-
-                            # Use st.markdown with a styled <pre> tag for a code-block style view
-                            st.markdown(f"""
-                            <div style="background-color: #1a1a2e; 
-                                         border: 1px solid #3a3a5e; 
-                                         border-radius: 8px; 
-                                         padding: 15px; 
-                                         height: 500px; 
-                                         overflow-y: scroll; 
-                                         font-family: 'Courier New', Courier, monospace; 
-                                         color: #e0e0e0;
-                                         font-size: 0.9em;">
-                                <pre style="white-space: pre-wrap; margin: 0; word-wrap: break-word;">{clean_content}</pre>
-                            </div>
-                            """, unsafe_allow_html=True)
-            else:
-                        st.error("❌ File not found")
-                        
-                # --- File Details ---
-                if os.path.exists(doc_path):
-                    file_size = os.path.getsize(doc_path)
-                    file_modified = os.path.getmtime(doc_path)
-                    st.markdown(f"""
-                    <div style="padding: 12px; background-color: rgba(108, 117, 125, 0.1); border-radius: 5px; margin: 15px 0; border: 1px solid #444;">
-                        <strong>ℹ️ File Details:</strong><br>
-                        <span style="color: #ccc;">📁 Path:</span> <code>{doc_path}</code><br>
-                        <span style="color: #ccc;">📏 Size:</span> <span style="color: #e0e0e0;">{file_size:,} bytes</span><br>
-                        <span style="color: #ccc;">🕐 Last Modified:</span> <span style="color: #e0e0e0;">{pd.to_datetime(file_modified, unit='s').strftime('%Y-%m-%d %H:%M:%S')}</span>
-                    </div>
-                    """, unsafe_allow_html=True)
-
 # --- Main Dashboard ---
 st.markdown(f'<h1 class="main-header">AI Corporate Intelligence: {selected_company}</h1>', unsafe_allow_html=True)
 
@@ -620,6 +559,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
