@@ -29,9 +29,10 @@ camelot-py[cv]==0.10.1
 opencv-python-headless==4.8.0.76
 
 # AI & NLP
-groq==0.4.2
+groq==0.8.0
 transformers==4.30.2
 torch==2.0.1
+textblob==0.17.1
 # For sentence tokenization in some environments
 nltk==3.8.1
 
