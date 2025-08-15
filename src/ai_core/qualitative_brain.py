@@ -15,23 +15,21 @@ class QualitativeBrain:
         if not GROQ_API_KEY:
             raise ValueError("GROQ_API_KEY not found. Please set it in your environment variables or .env file.")
         
-        # This is the corrected, simplified initialization.
+        # This corrected, simplified initialization is the fix.
         try:
             self.groq_client = Groq(api_key=GROQ_API_KEY)
             logging.info("QualitativeBrain initialized successfully with Groq client.")
         except Exception as e:
             logging.error(f"Failed to initialize Groq client: {e}")
             raise ValueError(f"Could not initialize Groq client: {e}")
-            
+
     def analyze_text_sentiment(self, text):
         """
-        Analyzes the sentiment of a given text using TextBlob as a fallback
-        or Groq for more sophisticated analysis.
+        Analyzes the sentiment of a given text using TextBlob.
         """
         if not text or not isinstance(text, str):
             return 0.0
         
-        # Use TextBlob for quick sentiment analysis as primary method
         try:
             blob = TextBlob(text)
             return float(blob.sentiment.polarity)
@@ -47,7 +45,7 @@ class QualitativeBrain:
             return "Text too short to summarize."
         
         try:
-            prompt = f"Please provide a concise summary of the following text in no more than {max_length} words:\n\n{text[:2000]}"  # Limit input length
+            prompt = f"Please provide a concise summary of the following text in no more than {max_length} words:\n\n{text[:2000]}"
             
             response = self.groq_client.chat.completions.create(
                 model=GROQ_LLM_MODEL,
@@ -133,6 +131,3 @@ class QualitativeBrain:
                 "key_points": ["Analysis unavailable due to API error"],
                 "summary": "Could not perform detailed analysis."
             }
-
-
-
