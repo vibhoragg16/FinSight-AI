@@ -17,7 +17,7 @@ from huggingface_hub import hf_hub_download
 def load_predictor_from_hub(repo_id, filename):
     """Downloads the main predictor model from Hugging Face Hub."""
     try:
-        model_path = hf_hub_download(repo_id=repo_id, filename=filename)
+        model_path = hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
         return joblib.load(model_path)
     except Exception as e:
         logging.error(f"Failed to load predictor model: {e}")
@@ -77,5 +77,6 @@ class QuantitativeBrain:
                 'news_sentiment': news_sentiment
 
             }
+
 
 
