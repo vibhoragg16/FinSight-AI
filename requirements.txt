@@ -48,3 +48,5 @@ beautifulsoup4
 huggingface_hub
 
 beautifulsoup4
+
+pysqlite3-binary
