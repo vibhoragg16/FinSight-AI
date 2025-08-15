@@ -4,7 +4,7 @@ import os
 import logging
 import streamlit as st
 from huggingface_hub import snapshot_download
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma  # Updated import
 from langchain_community.embeddings import SentenceTransformerEmbeddings
 from src.utils.config import VECTOR_STORE_PATH, EMBEDDING_MODEL_NAME, HF_REPO_ID
 
@@ -42,7 +42,16 @@ def download_and_load_vector_store(repo_id, local_dir_base, company_ticker):
         return vector_store
     except Exception as e:
         logging.error(f"Failed to load vector store from {persist_directory}: {e}")
-        return None
+        # Try alternative ChromaDB initialization
+        try:
+            import chromadb
+            client = chromadb.PersistentClient(path=persist_directory)
+            vector_store = Chroma(client=client, embedding_function=embeddings)
+            logging.info(f"Successfully loaded vector store for {company_ticker} using alternative method.")
+            return vector_store
+        except Exception as e2:
+            logging.error(f"Alternative method also failed: {e2}")
+            return None
 
 class RetrievalEngine:
     """
