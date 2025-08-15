@@ -14,7 +14,7 @@ def download_and_load_vector_store(repo_id, local_dir_base, company_ticker):
     Downloads a specific company's vector store folder from Hugging Face Hub
     and loads it into a Chroma object.
     """
-    persist_directory = os.path.join(local_dir_base, company_ticker)
+    persist_directory = os.path.join(local_dir_base, "data", "vector_store", company_ticker)
     hf_folder_path = f"data/vector_store/{company_ticker}"
 
     # Step 1: Download the folder if it doesn't exist locally
@@ -70,4 +70,5 @@ class RetrievalEngine:
         except Exception as e:
             logging.error(f"Error during document retrieval for {self.company_ticker}: {e}")
             return []
+
 
