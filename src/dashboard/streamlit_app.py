@@ -1,8 +1,32 @@
 # src/dashboard/streamlit_app.py
 
-__import__('pysqlite3')
 import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+import subprocess
+import importlib.util
+
+# Check if pysqlite3 is available
+spec = importlib.util.find_spec("pysqlite3")
+if spec is None:
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "pysqlite3-binary"])
+        print("Successfully installed pysqlite3-binary")
+    except Exception as e:
+        print(f"Failed to install pysqlite3-binary: {e}")
+
+# Replace sqlite3 with pysqlite3
+try:
+    __import__('pysqlite3')
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+    print("SQLite3 module successfully replaced with pysqlite3")
+except ImportError as e:
+    print(f"Failed to import pysqlite3: {e}")
+    # Try alternative approach
+    try:
+        import pysqlite3 as sqlite3
+        sys.modules['sqlite3'] = sqlite3
+        print("SQLite3 module replaced using alternative method")
+    except ImportError:
+        print("Could not replace sqlite3 module - ChromaDB may fail")
 
 import streamlit as st
 import pandas as pd
@@ -571,6 +595,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
