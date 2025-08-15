@@ -3,7 +3,7 @@ from groq import Groq
 from langchain_groq import ChatGroq
 from langchain.chains import RetrievalQA
 from langchain_chroma import Chroma  # Updated import
-from langchain_community.embeddings import SentenceTransformerEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from src.rag.retrieval_engine import RetrievalEngine
 from src.utils.config import GROQ_API_KEY, GROQ_LLM_MODEL, EMBEDDING_MODEL_NAME
 
@@ -55,7 +55,7 @@ def query_rag_system(company_ticker, query):
     llm = ChatGroq(temperature=0.1, model_name=GROQ_LLM_MODEL, groq_api_key=GROQ_API_KEY)
     
     try:
-        embeddings = SentenceTransformerEmbeddings(model_name=EMBEDDING_MODEL_NAME)
+        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
         # Use the updated Chroma import
         temp_retriever = Chroma.from_documents(list(unique_docs), embeddings).as_retriever()
         qa_chain = RetrievalQA.from_chain_type(
@@ -69,3 +69,4 @@ def query_rag_system(company_ticker, query):
     except Exception as e:
         logging.error(f"Error querying RAG system for {company_ticker}: {e}")
         return f"An error occurred: {e}", []
+
