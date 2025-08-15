@@ -1,83 +1,144 @@
-# File: src/ai_core/quantitative_brain.py
+# src/ai_core/qualitative_brain.py
 
-import pandas as pd
 import os
-import joblib
 import logging
+from groq import Groq
+from textblob import TextBlob
+from src.utils.config import GROQ_API_KEY, GROQ_LLM_MODEL
 
-from src.models.pca_health_scorer import PCAHealthScorer
-from src.features.build_features import prepare_features_for_prediction
-from src.utils.financial_ratios import calculate_all_ratios
-from src.utils.config import HF_REPO_ID, MODEL_SAVE_PATH as MODELS_PATH
-
-import streamlit as st
-from huggingface_hub import hf_hub_download
-
-@st.cache_resource
-def load_predictor_from_hub(repo_id, filename):
-    """Downloads the main predictor model from Hugging Face Hub."""
-    try:
-        model_path = hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
-        return joblib.load(model_path)
-    except Exception as e:
-        logging.error(f"Failed to load predictor model: {e}")
-        st.error("Stock predictor model could not be loaded.")
-        return None
-
-
-class QuantitativeBrain:
+class QualitativeBrain:
     """
-    A high-level coordinator for all quantitative analysis. It uses specialized
-    models for scoring, prediction, and feature engineering.
+    Handles qualitative analysis tasks like sentiment analysis and text summarization.
     """
     def __init__(self):
-        """Initializes the QuantitativeBrain with its models from Hugging Face Hub."""
-        self.health_scorer = PCAHealthScorer()
-        self.predictor = load_predictor_from_hub(repo_id=HF_REPO_ID, filename="models/saved/stock_predictor_model.pkl")
-        if self.predictor:
-            logging.info("QuantitativeBrain initialized with stock predictor from Hugging Face Hub.")
+        """Initialize the QualitativeBrain with Groq client."""
+        if not GROQ_API_KEY:
+            raise ValueError("GROQ_API_KEY not found. Please set it in your environment variables or .env file.")
+        
+        # Initialize Groq client with minimal arguments to avoid compatibility issues
+        try:
+            self.groq_client = Groq(api_key=GROQ_API_KEY)
+            logging.info("QualitativeBrain initialized successfully with Groq client.")
+        except Exception as e:
+            logging.error(f"Failed to initialize Groq client: {e}")
+            # Fallback initialization attempt
+            try:
+                self.groq_client = Groq(
+                    api_key=GROQ_API_KEY,
+                    # Remove any problematic parameters
+                )
+                logging.info("QualitativeBrain initialized with fallback method.")
+            except Exception as e2:
+                logging.error(f"Fallback initialization also failed: {e2}")
+                raise ValueError(f"Could not initialize Groq client: {e2}")
 
-    def get_analysis(self, market_data, financials_data, news_sentiment, ticker: str | None = None):
-            """
-            Performs a full quantitative analysis and returns key insights.
-            """
-            # --- Health Score Calculation ---
+    def analyze_text_sentiment(self, text):
+        """
+        Analyzes the sentiment of a given text using TextBlob as a fallback
+        or Groq for more sophisticated analysis.
+        """
+        if not text or not isinstance(text, str):
+            return 0.0
+        
+        # Use TextBlob for quick sentiment analysis as primary method
+        try:
+            blob = TextBlob(text)
+            return float(blob.sentiment.polarity)
+        except Exception as e:
+            logging.error(f"TextBlob sentiment analysis failed: {e}")
+            return 0.0
+
+    def generate_summary(self, text, max_length=150):
+        """
+        Generates a summary of the given text using Groq.
+        """
+        if not text or len(text.strip()) < 50:
+            return "Text too short to summarize."
+        
+        try:
+            prompt = f"Please provide a concise summary of the following text in no more than {max_length} words:\n\n{text[:2000]}"  # Limit input length
             
-            # FIX: Unpack the tuple returned by calculate_all_ratios
-            if not financials_data.empty:
-                ratios_df, missing_cols = calculate_all_ratios(financials_data)
-                # The 'missing_cols' variable is now available if needed for logging
-            else:
-                ratios_df = pd.DataFrame()
-
-            health_score = self.health_scorer.calculate_score(ratios_df)
-
-            # --- Prediction Calculation ---
-            features_df = prepare_features_for_prediction(market_data, ratios_df, news_sentiment)
+            response = self.groq_client.chat.completions.create(
+                model=GROQ_LLM_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3,
+                max_tokens=200
+            )
             
-            prediction = "N/A"
-            confidence = 0.0
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            logging.error(f"Summary generation failed: {e}")
+            return "Could not generate summary."
 
-            if self.predictor is not None and not features_df.empty:
-                latest_features = features_df.tail(1).drop(columns=['Target'], errors='ignore')
-                
-                if hasattr(self.predictor, 'feature_names_in_'):
-                    latest_features = latest_features.reindex(columns=self.predictor.feature_names_in_, fill_value=0)
-
-                pred_proba = self.predictor.predict_proba(latest_features)[0]
-                prediction = "Bullish" if pred_proba[1] > 0.5 else "Bearish"
-                confidence = max(pred_proba)
-            else:
-                logging.warning("Predictor model not loaded or no features available, skipping prediction.")
-                
+    def analyze_financial_text(self, text, context="financial"):
+        """
+        Performs specialized financial text analysis using Groq.
+        """
+        if not text:
+            return {"sentiment": 0.0, "key_points": [], "summary": "No text provided."}
+        
+        try:
+            prompt = f"""
+            Analyze the following {context} text and provide:
+            1. Sentiment score (-1 to 1)
+            2. Key financial insights (3-5 bullet points)
+            3. Brief summary (2-3 sentences)
+            
+            Text: {text[:1500]}
+            
+            Format your response as:
+            SENTIMENT: [score]
+            KEY_POINTS:
+            - [point 1]
+            - [point 2]
+            ...
+            SUMMARY: [summary]
+            """
+            
+            response = self.groq_client.chat.completions.create(
+                model=GROQ_LLM_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                max_tokens=300
+            )
+            
+            result_text = response.choices[0].message.content.strip()
+            
+            # Parse the response
+            lines = result_text.split('\n')
+            sentiment = 0.0
+            key_points = []
+            summary = ""
+            
+            current_section = None
+            for line in lines:
+                line = line.strip()
+                if line.startswith('SENTIMENT:'):
+                    try:
+                        sentiment = float(line.split(':', 1)[1].strip())
+                    except:
+                        sentiment = 0.0
+                elif line.startswith('KEY_POINTS:'):
+                    current_section = 'key_points'
+                elif line.startswith('SUMMARY:'):
+                    current_section = 'summary'
+                    summary = line.split(':', 1)[1].strip()
+                elif current_section == 'key_points' and line.startswith('- '):
+                    key_points.append(line[2:])
+                elif current_section == 'summary' and line:
+                    summary += " " + line
+            
             return {
-                'health_score': health_score,
-                'prediction': prediction,
-                'confidence': confidence,
-                'news_sentiment': news_sentiment
-
+                "sentiment": sentiment,
+                "key_points": key_points,
+                "summary": summary.strip()
             }
-
-
-
-
+            
+        except Exception as e:
+            logging.error(f"Financial text analysis failed: {e}")
+            # Fallback to simple sentiment analysis
+            return {
+                "sentiment": self.analyze_text_sentiment(text),
+                "key_points": ["Analysis unavailable due to API error"],
+                "summary": "Could not perform detailed analysis."
+            }
