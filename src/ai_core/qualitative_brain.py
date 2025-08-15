@@ -31,7 +31,7 @@ class QualitativeBrain:
             except Exception as e2:
                 logging.error(f"Fallback initialization also failed: {e2}")
                 raise ValueError(f"Could not initialize Groq client: {e2}")
-
+                
     def analyze_text_sentiment(self, text):
         """
         Analyzes the sentiment of a given text using TextBlob as a fallback
@@ -142,3 +142,4 @@ class QualitativeBrain:
                 "key_points": ["Analysis unavailable due to API error"],
                 "summary": "Could not perform detailed analysis."
             }
+
