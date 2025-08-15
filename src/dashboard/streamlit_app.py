@@ -74,6 +74,48 @@ def load_json_from_hub(repo_id, filename):
         logging.error(f"Failed to load JSON {filename}: {e}")
         return pd.DataFrame()
 
+# Add this to your streamlit_app.py to replace the current init_brains function
+
+@st.cache_resource
+def init_brains():
+    """Initialize AI brains with better error handling."""
+    try:
+        # Check if GROQ_API_KEY is available
+        groq_key = os.environ.get("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY", None)
+        if not groq_key:
+            st.error("🔑 GROQ_API_KEY is required. Please add it to your Streamlit secrets.")
+            st.info("Go to your app settings and add GROQ_API_KEY to the secrets section.")
+            st.stop()
+        
+        # Set the environment variable if it's from secrets
+        if groq_key and "GROQ_API_KEY" not in os.environ:
+            os.environ["GROQ_API_KEY"] = groq_key
+        
+        # Initialize the brains
+        qual_brain = QualitativeBrain()
+        quant_brain = QuantitativeBrain()
+        
+        return qual_brain, quant_brain
+        
+    except ValueError as e:
+        st.error(f"🚫 Configuration Error: {e}")
+        st.info("Please check your API key configuration in Streamlit secrets.")
+        st.stop()
+    except Exception as e:
+        st.error(f"❌ Initialization Error: {e}")
+        st.error("This might be due to:")
+        st.write("- Missing or invalid GROQ API key")
+        st.write("- Network connectivity issues")
+        st.write("- Package version conflicts")
+        
+        # Try to provide more specific error information
+        if "proxies" in str(e).lower():
+            st.error("🔧 **Groq Client Issue**: The Groq client is having compatibility issues.")
+            st.info("This is typically resolved by updating the groq package version.")
+        
+        st.stop()
+
+
 # --- App State & Initialization ---
 @st.cache_resource
 def init_brains():
@@ -595,6 +637,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
