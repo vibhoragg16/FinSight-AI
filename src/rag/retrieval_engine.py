@@ -5,7 +5,7 @@ import logging
 import streamlit as st
 from huggingface_hub import snapshot_download
 from langchain_chroma import Chroma
-from langchain_community.embeddings import SentenceTransformerEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from src.utils.config import VECTOR_STORE_PATH, EMBEDDING_MODEL_NAME, HF_REPO_ID
 
 @st.cache_resource
@@ -37,7 +37,7 @@ def download_and_load_vector_store(repo_id, local_dir_base, company_ticker):
     # Step 2: Load the vector store from the (now guaranteed) local path
     try:
         # Use the correct, modern embeddings class
-        embeddings = SentenceTransformerEmbeddings(model_name=EMBEDDING_MODEL_NAME)
+        embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL_NAME)
         vector_store = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
         logging.info(f"Successfully loaded vector store for {company_ticker}.")
         return vector_store
@@ -70,3 +70,4 @@ class RetrievalEngine:
         except Exception as e:
             logging.error(f"Error during document retrieval for {self.company_ticker}: {e}")
             return []
+
