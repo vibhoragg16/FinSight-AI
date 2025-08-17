@@ -35,6 +35,8 @@ import plotly.graph_objects as go
 import sys
 import logging
 import re
+import hashlib
+import time
 from bs4 import BeautifulSoup
 from huggingface_hub import hf_hub_download
 from pathlib import PurePath, Path
@@ -174,34 +176,26 @@ def extract_ticker_and_filename_from_path(doc_path):
         return None, None
 
 def extract_filing_info_from_text(text_content):
-    """
-    Extract filing information from SEC document text.
-    Your dataset appears to contain SEC filings in text format.
-    """
+    """Extract filing information from SEC document text."""
     try:
         filing_info = {}
         
-        # Extract accession number
         accession_match = re.search(r'ACCESSION NUMBER:\s*(\d{10}-\d{2}-\d{6})', text_content)
         if accession_match:
             filing_info['accession'] = accession_match.group(1)
         
-        # Extract filing type
         filing_type_match = re.search(r'CONFORMED SUBMISSION TYPE:\s*([^\n]+)', text_content)
         if filing_type_match:
             filing_info['filing_type'] = filing_type_match.group(1).strip()
         
-        # Extract company name
         company_match = re.search(r'COMPANY CONFORMED NAME:\s*([^\n]+)', text_content)
         if company_match:
             filing_info['company_name'] = company_match.group(1).strip()
         
-        # Extract CIK
         cik_match = re.search(r'CENTRAL INDEX KEY:\s*(\d+)', text_content)
         if cik_match:
             filing_info['cik'] = cik_match.group(1)
         
-        # Extract filing date
         filed_date_match = re.search(r'FILED AS OF DATE:\s*(\d{8})', text_content)
         if filed_date_match:
             filing_info['filed_date'] = filed_date_match.group(1)
@@ -210,8 +204,6 @@ def extract_filing_info_from_text(text_content):
     except Exception as e:
         logging.error(f"Error extracting filing info: {e}")
         return {}
-
-
 
 @st.cache_resource
 def init_brains():
@@ -304,9 +296,7 @@ def run_ai_analysis(ticker, market_df, news_df, financials_df):
 
 # --- Enhanced Source Display Functions ---
 def find_relevant_filings(dataset, selected_company, query_keywords=None):
-    """
-    Find filings relevant to the selected company and query.
-    """
+    """Find filings relevant to the selected company and query."""
     try:
         company_mapping = {
             'AAPL': 'APPLE INC',
@@ -332,8 +322,7 @@ def find_relevant_filings(dataset, selected_company, query_keywords=None):
                 filing_info['content'] = text_content
                 relevant_filings.append(filing_info)
                 
-                # Limit to prevent performance issues
-                if len(relevant_filings) >= 10:
+                if len(relevant_filings) >= 5:  # Limit to prevent issues
                     break
         
         return relevant_filings
@@ -346,13 +335,12 @@ def get_sec_link_from_filing_info(filing_info, filename=""):
     try:
         if 'accession' in filing_info and 'cik' in filing_info:
             accession = filing_info['accession']
-            cik = filing_info['cik'].zfill(10)  # Pad CIK to 10 digits
+            cik = filing_info['cik'].zfill(10)
             accession_no_dashes = accession.replace('-', '')
             
             if filename:
                 return f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_no_dashes}/{filename}"
             else:
-                # Link to the filing index
                 return f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_no_dashes}/{accession}-index.html"
     except Exception as e:
         logging.error(f"Error generating SEC link: {e}")
@@ -360,13 +348,10 @@ def get_sec_link_from_filing_info(filing_info, filename=""):
     return None
 
 def extract_document_sections(text_content):
-    """
-    Extract different sections from SEC filing text.
-    """
+    """Extract different sections from SEC filing text."""
     sections = {}
     
     try:
-        # Split by document tags
         documents = re.split(r'<DOCUMENT>', text_content)
         
         for doc in documents:
@@ -375,7 +360,6 @@ def extract_document_sections(text_content):
                 if doc_type_match:
                     doc_type = doc_type_match.group(1).strip()
                     
-                    # Extract the actual content (usually after <TEXT>)
                     text_match = re.search(r'<TEXT>(.*?)(?:</TEXT>|$)', doc, re.DOTALL)
                     if text_match:
                         sections[doc_type] = text_match.group(1).strip()
@@ -421,9 +405,16 @@ def extract_relevant_paragraphs(content, query_keywords, max_paragraphs=3):
         logging.error(f"Error extracting paragraphs: {e}")
         return []
 
-def display_enhanced_sources(sources, prompt=""):
+def generate_unique_key(base_key, additional_info=""):
+    """Generate a unique key for Streamlit components."""
+    timestamp = str(int(time.time() * 1000))  # Current timestamp in milliseconds
+    combined = f"{base_key}_{additional_info}_{timestamp}"
+    # Create a hash to ensure uniqueness and reasonable length
+    return hashlib.md5(combined.encode()).hexdigest()[:12]
+
+def display_enhanced_sources_fixed(sources, prompt=""):
     """
-    Enhanced source display corrected for your actual dataset structure.
+    Fixed version that avoids Streamlit key collisions.
     """
     if not sources:
         return
@@ -456,12 +447,15 @@ def display_enhanced_sources(sources, prompt=""):
 
     st.success(f"✅ Found {len(relevant_filings)} relevant SEC filings for {selected_company}")
 
-    # Display each relevant filing
+    # Display each relevant filing with unique keys
     for i, filing in enumerate(relevant_filings[:3]):  # Limit to 3 most recent
         filing_type = filing.get('filing_type', 'Unknown')
-        accession = filing.get('accession', 'Unknown')
+        accession = filing.get('accession', f'Unknown_{i}')  # Ensure accession is unique
         company_name = filing.get('company_name', 'Unknown')
         filed_date = filing.get('filed_date', 'Unknown')
+        
+        # Create a unique identifier for this filing
+        filing_id = f"{i}_{accession}_{filed_date}".replace('-', '_').replace(' ', '_')
         
         # Format the date
         if filed_date != 'Unknown' and len(filed_date) == 8:
@@ -472,7 +466,8 @@ def display_enhanced_sources(sources, prompt=""):
         else:
             formatted_date = filed_date
 
-        view_state_key = f'active_view_filing_{i}_{accession}'
+        # Generate unique keys for this filing
+        view_state_key = f'active_view_filing_{filing_id}'
         st.session_state.setdefault(view_state_key, None)
 
         with st.expander(f"📄 {filing_type} - {accession} ({formatted_date})", expanded=True):
@@ -515,14 +510,19 @@ def display_enhanced_sources(sources, prompt=""):
             
             col1, col2, col3 = st.columns(3)
             
+            # Generate unique keys for buttons
+            summary_key = generate_unique_key("summary", filing_id)
+            sections_key = generate_unique_key("sections", filing_id)
+            content_key = generate_unique_key("content", filing_id)
+            
             with col1:
-                if st.button(f"🤖 Generate AI Summary", key=f"summary_{i}_{accession}"):
+                if st.button(f"🤖 Generate AI Summary", key=summary_key):
                     st.session_state[view_state_key] = 'summary' if st.session_state[view_state_key] != 'summary' else None
             with col2:
-                if st.button(f"📖 Extract Key Sections", key=f"sections_{i}_{accession}"):
+                if st.button(f"📖 Extract Key Sections", key=sections_key):
                     st.session_state[view_state_key] = 'sections' if st.session_state[view_state_key] != 'sections' else None
             with col3:
-                if st.button(f"📄 View Full Filing", key=f"fullcontent_{i}_{accession}"):
+                if st.button(f"📄 View Full Filing", key=content_key):
                     st.session_state[view_state_key] = 'content' if st.session_state[view_state_key] != 'content' else None
             
             active_view = st.session_state.get(view_state_key)
@@ -539,17 +539,17 @@ def display_enhanced_sources(sources, prompt=""):
                             
                             summary_prompt = f"""Analyze this {filing_type} SEC filing for {company_name} and provide a comprehensive executive summary.
 
-                                Focus on:
-                                - Key financial highlights and performance metrics
-                                - Major business developments and strategic initiatives  
-                                - Risk factors and challenges mentioned
-                                - Management outlook and forward guidance
-                                - Any significant changes from previous periods
-                                
-                                Keep the summary under 400 words and use bullet points for clarity.
-                                
-                                FILING CONTENT:
-                                {clean_content}"""
+Focus on:
+- Key financial highlights and performance metrics
+- Major business developments and strategic initiatives  
+- Risk factors and challenges mentioned
+- Management outlook and forward guidance
+- Any significant changes from previous periods
+
+Keep the summary under 400 words and use bullet points for clarity.
+
+FILING CONTENT:
+{clean_content}"""
                             
                             response = qual_brain.groq_client.chat.completions.create(
                                 model=GROQ_LLM_MODEL,
@@ -580,6 +580,7 @@ def display_enhanced_sources(sources, prompt=""):
                             if sections:
                                 st.markdown("**📋 Document Sections Found:**")
                                 for section_type, section_content in sections.items():
+                                    section_key = generate_unique_key(f"section_{section_type}", filing_id)
                                     with st.expander(f"📄 {section_type}", expanded=False):
                                         # Clean and display section content
                                         soup = BeautifulSoup(section_content, 'html.parser')
@@ -589,7 +590,7 @@ def display_enhanced_sources(sources, prompt=""):
                                             st.info("📄 Section is very long. Showing first 5,000 characters.")
                                             clean_section = clean_section[:5000] + "\n\n... [Content truncated]"
                                         
-                                        st.text_area(f"{section_type} Content", clean_section, height=300, key=f"section_{section_type}_{i}")
+                                        st.text_area(f"{section_type} Content", clean_section, height=300, key=section_key)
                             else:
                                 st.warning("No distinct document sections found in this filing.")
                                 
@@ -608,16 +609,117 @@ def display_enhanced_sources(sources, prompt=""):
                                 clean_content = clean_content[:50000] + "\n\n... [Content truncated for display]"
                             
                             st.markdown("#### 📄 Full SEC Filing Content")
+                            
+                            # Generate unique key for text area
+                            text_area_key = generate_unique_key("content_full", filing_id)
+                            
                             st.text_area(
                                 "Filing Content", 
                                 clean_content, 
                                 height=500, 
-                                key=f"content_full_{i}_{accession}",
+                                key=text_area_key,
                                 help="Complete text content of the SEC filing"
                             )
                             
                         except Exception as e:
                             st.error(f"Failed to display content: {e}")
+
+# Alternative approach for the original display_enhanced_sources function
+def display_enhanced_sources(sources, prompt=""):
+    """
+    Fixed wrapper function that handles both old and new source formats.
+    """
+    # If we have sources from the RAG system, display them in a simpler way first
+    if sources:
+        st.markdown("---")
+        st.markdown("""
+        <div style="padding: 15px; background: linear-gradient(90deg, #28a745 0%, #20c997 100%); border-radius: 8px; margin: 20px 0;">
+        <h3 style="color: white; margin: 0; text-align: center;">📚 Sources & Analysis</h3>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Group sources by document
+        doc_sources = {}
+        for s in sources:
+            doc_key = s.metadata.get("source", "Unknown")
+            if doc_key not in doc_sources:
+                doc_sources[doc_key] = []
+            doc_sources[doc_key].append(s)
+
+        # Display each document source
+        for doc_index, (doc_path, doc_refs) in enumerate(doc_sources.items()):
+            if doc_path == "Unknown":
+                continue
+                
+            filename = os.path.basename(doc_path) if doc_path else f"Document_{doc_index}"
+            
+            # Create unique identifier for this document
+            doc_hash = hashlib.md5(f"{doc_path}_{doc_index}".encode()).hexdigest()[:8]
+            
+            with st.expander(f"📄 {filename}", expanded=True):
+                # Display content snippets
+                st.markdown("### 📝 Relevant Content")
+                for i, ref in enumerate(doc_refs, 1):
+                    snippet = ref.page_content
+                    st.markdown(f"""
+                    <div style="border-left: 4px solid #007bff; padding-left: 15px; margin: 15px 0; 
+                               background-color: rgba(0, 123, 255, 0.05); border-radius: 5px;">
+                        <h5 style="color: #00aaff; margin-top: 5px; margin-bottom: 10px;">📍 Reference {i}</h5>
+                        <p style="margin: 0; line-height: 1.6; color: #e0e0e0; font-size: 16px;">{snippet}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Simple analysis buttons with unique keys
+                st.markdown("### 🔍 Quick Analysis")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    summary_key = f"quick_summary_{doc_hash}"
+                    if st.button("🤖 Analyze Content", key=summary_key):
+                        with st.spinner("Analyzing content..."):
+                            try:
+                                combined_content = " ".join([ref.page_content for ref in doc_refs])
+                                analysis_prompt = f"""Analyze this content from a SEC filing and provide key insights:
+
+{combined_content[:5000]}
+
+Provide:
+- Main financial points
+- Key risks mentioned  
+- Important business updates
+- Strategic outlook
+
+Keep it concise and bullet-pointed."""
+
+                                response = qual_brain.groq_client.chat.completions.create(
+                                    model=GROQ_LLM_MODEL,
+                                    messages=[{"role": "user", "content": analysis_prompt}],
+                                    temperature=0.2,
+                                    max_tokens=400
+                                )
+                                
+                                analysis_content = response.choices[0].message.content
+                                st.markdown(f"""
+                                <div style="background: linear-gradient(135deg, #1E293B 0%, #334155 100%); 
+                                           padding: 20px; border-radius: 10px; color: white; margin: 15px 0;">
+                                    <h4 style="margin: 0 0 15px 0; color: #60A5FA;">🔍 Content Analysis</h4>
+                                    <div style="line-height: 1.6;">{analysis_content}</div>
+                                </div>
+                                """, unsafe_allow_html=True)
+                                
+                            except Exception as e:
+                                st.error(f"Analysis failed: {e}")
+                
+                with col2:
+                    if len(combined_content := " ".join([ref.page_content for ref in doc_refs])) > 0:
+                        st.info(f"Content length: {len(combined_content)} characters")
+                        
+    # Try to also load and display SEC filings if available
+    try:
+        display_enhanced_sources_fixed(sources, prompt)
+    except Exception as e:
+        st.warning(f"Advanced SEC analysis not available: {e}")
+        logging.error(f"SEC analysis error: {e}")
 
 # --- Main Dashboard ---
 st.markdown(f'<h1 class="main-header">AI Corporate Intelligence: {selected_company}</h1>', unsafe_allow_html=True)
@@ -859,6 +961,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
