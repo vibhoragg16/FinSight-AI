@@ -14,24 +14,24 @@ FinSight AI is designed with a clear separation between data, AI models, and the
 
 ```
 [Data Sources]        [Backend Processing]        [AI/ML Models]          [Frontend]
-  - SEC EDGAR  -----> |                        |                         |
-  - NewsAPI    -----> |  1. Data Collection  |                         |
-  - yfinance   -----> | (main.py collect)    |                         |
-                      |________________________|                         |
+  - SEC EDGAR  -----> |                        |                       |
+  - NewsAPI    -----> |  1. Data Collection    |                       |
+  - yfinance   -----> | (main.py collect)      |                       |
+                      |________________________|                       |
                                 |                                      |
                                 V                                      |
-                      |                        |                         |
-                      |  2. Document          |                         |
-                      |  Processing &         |                         |
-                      |  Vectorization        |                         |
-                      | (main.py process)     |                         |
-                      |________________________|                         |
+                      |                        |                       |
+                      |  2. Document           |                       |
+                      |  Processing &          |                       |
+                      |  Vectorization         |                       |
+                      | (main.py process)      |                       |
+                      |________________________|                       |
                                 |                                      |
                                 V (Text Chunks)                        |
-                      |                        |                         |
-                      |  3. RAG Vector Store  |                         |
-                      |  (ChromaDB on HF Hub) |                         |
-                      |________________________|                         |
+                      |                        |                       |
+                      |  3. RAG Vector Store   |                       |
+                      |  (ChromaDB on HF Hub)  |                       |
+                      |________________________|                       |
                                 |                                      |
                                 V (Financial Ratios)                   |
 +----------------------------------------------------------------------+
@@ -42,8 +42,8 @@ FinSight AI is designed with a clear separation between data, AI models, and the
 |     (Models saved as .pkl on HF Hub)                                 |
 |                                                                      |
 +----------------------------------------------------------------------+
-       |                  |                      |                      |
-       V (User Query)     V (Context)            V (Predictions)        V (Data)
+      |                  |                      |                      |
+ V (User Query)     V (Context)            V (Predictions)        V (Data)
 |                        |                      |                      |
 |  5. Streamlit Dashboard (main.py dashboard)                          |
 |     - Displays metrics, charts, and news.                            |
@@ -106,6 +106,18 @@ The platform is managed through a powerful Command-Line Interface (CLI).
     -   **Market Data**: Gathers historical stock prices, volumes, and technical indicators using `yfinance` and the `ta` library.
 
 ---
+
+### ⏰ Scheduling & Alerting (`src/scheduler/, src/alerting/`)
+-  **Task Scheduler**: A background service (`python main.py scheduler`) that automates the entire data pipeline. It can be configured to run data collection, processing, and analysis at different frequencies (e.g., market data every 4 hours, SEC filings daily).
+
+-  **Proactive Alerting**: A rule-based system that monitors for critical events like significant drops in the health score, high price volatility, or a cluster of negative news. It sends immediate email alerts for high-severity events and daily summaries for others.
+
+### 🧠 AI Core & Document Parsing (`src/ai_core/, src/document_processing/`)
+-  **Qualitative & Quantitative Brains**: The AI logic is separated into two main components: the `QuantitativeBrain` handles all numerical analysis (health score, predictions), while the `QualitativeBrain` manages text-based tasks like sentiment analysis and summarization.
+
+-  **Document Parsing**: The `parser.py` script is the core of the document processing pipeline. It extracts raw text from HTML and PDF filings, chunks it into manageable pieces, generates embeddings (numerical representations), and stores them in the ChromaDB vector store.
+
+-  **Table Extraction**: The system uses the `camelot-py` library to identify and extract tables from PDF documents, which can be used for more granular quantitative analysis.
 
 ## 📂 Project Structure Explained
 
