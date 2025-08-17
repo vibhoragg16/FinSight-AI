@@ -624,102 +624,6 @@ FILING CONTENT:
                         except Exception as e:
                             st.error(f"Failed to display content: {e}")
 
-# Alternative approach for the original display_enhanced_sources function
-def display_enhanced_sources(sources, prompt=""):
-    """
-    Fixed wrapper function that handles both old and new source formats.
-    """
-    # If we have sources from the RAG system, display them in a simpler way first
-    if sources:
-        st.markdown("---")
-        st.markdown("""
-        <div style="padding: 15px; background: linear-gradient(90deg, #28a745 0%, #20c997 100%); border-radius: 8px; margin: 20px 0;">
-        <h3 style="color: white; margin: 0; text-align: center;">📚 Sources & Analysis</h3>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Group sources by document
-        doc_sources = {}
-        for s in sources:
-            doc_key = s.metadata.get("source", "Unknown")
-            if doc_key not in doc_sources:
-                doc_sources[doc_key] = []
-            doc_sources[doc_key].append(s)
-
-        # Display each document source
-        for doc_index, (doc_path, doc_refs) in enumerate(doc_sources.items()):
-            if doc_path == "Unknown":
-                continue
-                
-            filename = os.path.basename(doc_path) if doc_path else f"Document_{doc_index}"
-            
-            # Create unique identifier for this document
-            doc_hash = hashlib.md5(f"{doc_path}_{doc_index}".encode()).hexdigest()[:8]
-            
-            with st.expander(f"📄 {filename}", expanded=True):
-                # Display content snippets
-                st.markdown("### 📝 Relevant Content")
-                for i, ref in enumerate(doc_refs, 1):
-                    snippet = ref.page_content
-                    st.markdown(f"""
-                    <div style="border-left: 4px solid #007bff; padding-left: 15px; margin: 15px 0; 
-                               background-color: rgba(0, 123, 255, 0.05); border-radius: 5px;">
-                        <h5 style="color: #00aaff; margin-top: 5px; margin-bottom: 10px;">📍 Reference {i}</h5>
-                        <p style="margin: 0; line-height: 1.6; color: #e0e0e0; font-size: 16px;">{snippet}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                # Simple analysis buttons with unique keys
-                st.markdown("### 🔍 Quick Analysis")
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    summary_key = f"quick_summary_{doc_hash}"
-                    if st.button("🤖 Analyze Content", key=summary_key):
-                        with st.spinner("Analyzing content..."):
-                            try:
-                                combined_content = " ".join([ref.page_content for ref in doc_refs])
-                                analysis_prompt = f"""Analyze this content from a SEC filing and provide key insights:
-
-{combined_content[:5000]}
-
-Provide:
-- Main financial points
-- Key risks mentioned  
-- Important business updates
-- Strategic outlook
-
-Keep it concise and bullet-pointed."""
-
-                                response = qual_brain.groq_client.chat.completions.create(
-                                    model=GROQ_LLM_MODEL,
-                                    messages=[{"role": "user", "content": analysis_prompt}],
-                                    temperature=0.2,
-                                    max_tokens=400
-                                )
-                                
-                                analysis_content = response.choices[0].message.content
-                                st.markdown(f"""
-                                <div style="background: linear-gradient(135deg, #1E293B 0%, #334155 100%); 
-                                           padding: 20px; border-radius: 10px; color: white; margin: 15px 0;">
-                                    <h4 style="margin: 0 0 15px 0; color: #60A5FA;">🔍 Content Analysis</h4>
-                                    <div style="line-height: 1.6;">{analysis_content}</div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                                
-                            except Exception as e:
-                                st.error(f"Analysis failed: {e}")
-                
-                with col2:
-                    if len(combined_content := " ".join([ref.page_content for ref in doc_refs])) > 0:
-                        st.info(f"Content length: {len(combined_content)} characters")
-                        
-    # Try to also load and display SEC filings if available
-    try:
-        display_enhanced_sources_fixed(sources, prompt)
-    except Exception as e:
-        st.warning(f"Advanced SEC analysis not available: {e}")
-        logging.error(f"SEC analysis error: {e}")
 
 # --- Main Dashboard ---
 st.markdown(f'<h1 class="main-header">AI Corporate Intelligence: {selected_company}</h1>', unsafe_allow_html=True)
@@ -961,6 +865,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
