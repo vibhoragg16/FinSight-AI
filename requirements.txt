@@ -51,4 +51,5 @@ huggingface_hub
 # CRITICAL: SQLite fix for ChromaDB
 pysqlite3-binary==0.5.2.post2
 
+datasets
 
