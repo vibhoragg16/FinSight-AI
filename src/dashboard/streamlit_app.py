@@ -75,7 +75,17 @@ def load_json_from_hub(repo_id, filename):
     except Exception as e:
         logging.error(f"Failed to load JSON {filename}: {e}")
         return pd.DataFrame()
-        
+
+@st.cache_data(ttl=3600)
+def load_sec_dataset():
+    """Load the SEC filings dataset from HuggingFace Hub."""
+    try:
+        dataset = load_dataset(HF_REPO_ID, split="train")
+        return dataset
+    except Exception as e:
+        logging.error(f"Failed to load SEC dataset: {e}")
+        return None
+
 @st.cache_data(ttl=3600)
 def get_filing_content_from_hub(ticker, filename):
     """Downloads a raw filing file from HF Hub and returns its content."""
@@ -161,6 +171,45 @@ def extract_ticker_and_filename_from_path(doc_path):
     except Exception as e:
         logging.error(f"Error parsing path {doc_path}: {e}")
         return None, None
+
+def extract_filing_info_from_text(text_content):
+    """
+    Extract filing information from SEC document text.
+    Your dataset appears to contain SEC filings in text format.
+    """
+    try:
+        filing_info = {}
+        
+        # Extract accession number
+        accession_match = re.search(r'ACCESSION NUMBER:\s*(\d{10}-\d{2}-\d{6})', text_content)
+        if accession_match:
+            filing_info['accession'] = accession_match.group(1)
+        
+        # Extract filing type
+        filing_type_match = re.search(r'CONFORMED SUBMISSION TYPE:\s*([^\n]+)', text_content)
+        if filing_type_match:
+            filing_info['filing_type'] = filing_type_match.group(1).strip()
+        
+        # Extract company name
+        company_match = re.search(r'COMPANY CONFORMED NAME:\s*([^\n]+)', text_content)
+        if company_match:
+            filing_info['company_name'] = company_match.group(1).strip()
+        
+        # Extract CIK
+        cik_match = re.search(r'CENTRAL INDEX KEY:\s*(\d+)', text_content)
+        if cik_match:
+            filing_info['cik'] = cik_match.group(1)
+        
+        # Extract filing date
+        filed_date_match = re.search(r'FILED AS OF DATE:\s*(\d{8})', text_content)
+        if filed_date_match:
+            filing_info['filed_date'] = filed_date_match.group(1)
+        
+        return filing_info
+    except Exception as e:
+        logging.error(f"Error extracting filing info: {e}")
+        return {}
+
 
 
 @st.cache_resource
@@ -253,26 +302,87 @@ def run_ai_analysis(ticker, market_df, news_df, financials_df):
     return analysis_results
 
 # --- Enhanced Source Display Functions ---
-def get_sec_link(filename, selected_company):
-    """Generate SEC EDGAR link if possible"""
+def find_relevant_filings(dataset, selected_company, query_keywords=None):
+    """
+    Find filings relevant to the selected company and query.
+    """
     try:
-        company_ciks = {
-            'AAPL': '0000320193', 'MSFT': '0000789019', 'GOOGL': '0001652044',
-            'AMZN': '0001018724', 'TSLA': '0001318605', 'META': '0001326801',
-            'NVDA': '0001045810', 'BRK.B': '0001067983', 'JNJ': '0000200406',
-            'V': '0001403161',
+        company_mapping = {
+            'AAPL': 'APPLE INC',
+            'MSFT': 'MICROSOFT',
+            'GOOGL': 'ALPHABET INC',
+            'AMZN': 'AMAZON',
+            'TSLA': 'TESLA',
+            'META': 'META PLATFORMS',
+            'NVDA': 'NVIDIA',
+            'BRK.B': 'BERKSHIRE HATHAWAY',
+            'JNJ': 'JOHNSON & JOHNSON',
+            'V': 'VISA'
         }
         
-        accession_match = re.search(r'(\d{10}-\d{2}-\d{6})', filename)
-        if accession_match and selected_company in company_ciks:
-            cik = company_ciks.get(selected_company)
-            accession = accession_match.group(1)
-            if cik:
-                return f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession.replace('-', '')}/{filename}"
+        company_name_pattern = company_mapping.get(selected_company, selected_company)
+        relevant_filings = []
+        
+        for i, item in enumerate(dataset):
+            text_content = item['text']
+            if company_name_pattern.upper() in text_content.upper():
+                filing_info = extract_filing_info_from_text(text_content)
+                filing_info['index'] = i
+                filing_info['content'] = text_content
+                relevant_filings.append(filing_info)
+                
+                # Limit to prevent performance issues
+                if len(relevant_filings) >= 10:
+                    break
+        
+        return relevant_filings
+    except Exception as e:
+        logging.error(f"Error finding relevant filings: {e}")
+        return []
+
+def get_sec_link_from_filing_info(filing_info, filename=""):
+    """Generate SEC EDGAR link from filing information."""
+    try:
+        if 'accession' in filing_info and 'cik' in filing_info:
+            accession = filing_info['accession']
+            cik = filing_info['cik'].zfill(10)  # Pad CIK to 10 digits
+            accession_no_dashes = accession.replace('-', '')
+            
+            if filename:
+                return f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_no_dashes}/{filename}"
+            else:
+                # Link to the filing index
+                return f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession_no_dashes}/{accession}-index.html"
     except Exception as e:
         logging.error(f"Error generating SEC link: {e}")
     
     return None
+
+def extract_document_sections(text_content):
+    """
+    Extract different sections from SEC filing text.
+    """
+    sections = {}
+    
+    try:
+        # Split by document tags
+        documents = re.split(r'<DOCUMENT>', text_content)
+        
+        for doc in documents:
+            if '<TYPE>' in doc:
+                doc_type_match = re.search(r'<TYPE>([^<\n]+)', doc)
+                if doc_type_match:
+                    doc_type = doc_type_match.group(1).strip()
+                    
+                    # Extract the actual content (usually after <TEXT>)
+                    text_match = re.search(r'<TEXT>(.*?)(?:</TEXT>|$)', doc, re.DOTALL)
+                    if text_match:
+                        sections[doc_type] = text_match.group(1).strip()
+        
+        return sections
+    except Exception as e:
+        logging.error(f"Error extracting document sections: {e}")
+        return {}
 
 def extract_relevant_paragraphs(content, query_keywords, max_paragraphs=3):
     """Extract paragraphs most relevant to the query using BeautifulSoup for cleaning."""
@@ -312,7 +422,7 @@ def extract_relevant_paragraphs(content, query_keywords, max_paragraphs=3):
 
 def display_enhanced_sources(sources, prompt=""):
     """
-    Enhanced source display with robust path parsing and error handling.
+    Enhanced source display corrected for your actual dataset structure.
     """
     if not sources:
         return
@@ -320,62 +430,84 @@ def display_enhanced_sources(sources, prompt=""):
     st.markdown("---")
     st.markdown("""
     <div style="padding: 15px; background: linear-gradient(90deg, #28a745 0%, #20c997 100%); border-radius: 8px; margin: 20px 0;">
-    <h3 style="color: white; margin: 0; text-align: center;">📚 Sources & Direct Access</h3>
+    <h3 style="color: white; margin: 0; text-align: center;">📚 SEC Filings & Analysis</h3>
     <p style="color: white; margin: 10px 0 0 0; text-align: center; opacity: 0.9;">
-    Direct links, full content, and AI-powered analysis of official sources
+    Direct access to SEC EDGAR filings with AI-powered analysis
     </p>
     </div>
     """, unsafe_allow_html=True)
 
-    doc_sources = {}
-    for s in sources:
-        doc_key = s.metadata.get("source", "Unknown")
-        if doc_key not in doc_sources:
-            doc_sources[doc_key] = []
-        doc_sources[doc_key].append(s)
+    # Load the SEC dataset
+    with st.spinner("Loading SEC filings dataset..."):
+        sec_dataset = load_sec_dataset()
+    
+    if not sec_dataset:
+        st.error("❌ Failed to load SEC filings dataset from HuggingFace Hub")
+        return
 
+    # Find relevant filings for the selected company
     query_keywords = prompt.lower().split() if prompt else []
+    relevant_filings = find_relevant_filings(sec_dataset, selected_company, query_keywords)
+    
+    if not relevant_filings:
+        st.warning(f"No SEC filings found for {selected_company} in the dataset.")
+        return
 
-    for doc_path, doc_refs in doc_sources.items():
-        if doc_path == "Unknown":
-            continue
-            
-        view_state_key = f'active_view_{hash(doc_path)}'
+    st.success(f"✅ Found {len(relevant_filings)} relevant SEC filings for {selected_company}")
+
+    # Display each relevant filing
+    for i, filing in enumerate(relevant_filings[:3]):  # Limit to 3 most recent
+        filing_type = filing.get('filing_type', 'Unknown')
+        accession = filing.get('accession', 'Unknown')
+        company_name = filing.get('company_name', 'Unknown')
+        filed_date = filing.get('filed_date', 'Unknown')
+        
+        # Format the date
+        if filed_date != 'Unknown' and len(filed_date) == 8:
+            try:
+                formatted_date = f"{filed_date[:4]}-{filed_date[4:6]}-{filed_date[6:8]}"
+            except:
+                formatted_date = filed_date
+        else:
+            formatted_date = filed_date
+
+        view_state_key = f'active_view_filing_{i}_{accession}'
         st.session_state.setdefault(view_state_key, None)
 
-        filename = os.path.basename(doc_path)
-        doc_type = "SEC Filing" if doc_path.endswith('.html') else "Financial Data"
-        
-        with st.expander(f"📄 {filename} - {doc_type}", expanded=True):
-            # Display filing type
-            filing_type = None
-            if doc_path.endswith('.html'):
-                if '10-k' in filename.lower(): 
-                    filing_type = "10-K Annual Report"
-                elif '10-q' in filename.lower(): 
-                    filing_type = "10-Q Quarterly Report"
-                elif '8-k' in filename.lower(): 
-                    filing_type = "8-K Current Report"
+        with st.expander(f"📄 {filing_type} - {accession} ({formatted_date})", expanded=True):
             
-            # Try to get SEC link
-            sec_link = get_sec_link(filename, selected_company)
+            # Display filing metadata
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Filing Type", filing_type)
+            with col2:
+                st.metric("Filed Date", formatted_date)
+            with col3:
+                st.metric("Company", company_name)
             
-            if filing_type:
-                st.markdown(f'<div style="padding: 12px; background-color: #007bff; color: white; border-radius: 5px; margin-bottom: 15px;"><strong>📋 {filing_type.upper()}</strong></div>', unsafe_allow_html=True)
-            
+            # SEC EDGAR link
+            sec_link = get_sec_link_from_filing_info(filing)
             if sec_link:
-                st.markdown(f'<div style="padding: 15px; background-color: #e3f2fd; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2196f3;"><h4 style="margin: 0 0 10px 0; color: #1976d2;">🔗 Direct SEC EDGAR Link</h4><a href="{sec_link}" target="_blank" style="color: #1976d2; text-decoration: none; font-weight: bold;">📊 View Official Filing on SEC.gov</a></div>', unsafe_allow_html=True)
-
-            # Display relevant content
-            st.markdown("### 📝 Relevant Content from This Document")
-            for i, ref in enumerate(doc_refs, 1):
-                snippet = ref.page_content
-                st.markdown(f"""
-                <div style="border-left: 4px solid #007bff; padding-left: 15px; margin: 15px 0; background-color: rgba(0, 123, 255, 0.05); border-radius: 5px;">
-                    <h5 style="color: #00aaff; margin-top: 5px; margin-bottom: 10px;">📍 Reference {i}</h5>
-                    <p style="margin: 0; line-height: 1.6; color: #e0e0e0; font-size: 16px;">{snippet}</p>
+                st.markdown(f'''
+                <div style="padding: 15px; background-color: #e3f2fd; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2196f3;">
+                    <h4 style="margin: 0 0 10px 0; color: #1976d2;">🔗 Direct SEC EDGAR Link</h4>
+                    <a href="{sec_link}" target="_blank" style="color: #1976d2; text-decoration: none; font-weight: bold;">
+                        📊 View Official Filing on SEC.gov
+                    </a>
                 </div>
-                """, unsafe_allow_html=True)
+                ''', unsafe_allow_html=True)
+
+            # Display source content from RAG
+            if sources:
+                st.markdown("### 📝 Relevant Content from RAG System")
+                for j, ref in enumerate(sources, 1):
+                    snippet = ref.page_content
+                    st.markdown(f"""
+                    <div style="border-left: 4px solid #007bff; padding-left: 15px; margin: 15px 0; background-color: rgba(0, 123, 255, 0.05); border-radius: 5px;">
+                        <h5 style="color: #00aaff; margin-top: 5px; margin-bottom: 10px;">📍 Reference {j}</h5>
+                        <p style="margin: 0; line-height: 1.6; color: #e0e0e0; font-size: 16px;">{snippet}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
 
             st.markdown("---")
             st.markdown("### 📁 Advanced Analysis & Access Options")
@@ -383,97 +515,108 @@ def display_enhanced_sources(sources, prompt=""):
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button(f"🤖 Generate AI Summary", key=f"summary_{hash(doc_path)}"):
+                if st.button(f"🤖 Generate AI Summary", key=f"summary_{i}_{accession}"):
                     st.session_state[view_state_key] = 'summary' if st.session_state[view_state_key] != 'summary' else None
             with col2:
-                if st.button(f"📖 Extract Key Paragraphs", key=f"paragraphs_{hash(doc_path)}"):
-                    st.session_state[view_state_key] = 'paragraphs' if st.session_state[view_state_key] != 'paragraphs' else None
+                if st.button(f"📖 Extract Key Sections", key=f"sections_{i}_{accession}"):
+                    st.session_state[view_state_key] = 'sections' if st.session_state[view_state_key] != 'sections' else None
             with col3:
-                if st.button(f"📄 View Complete Content", key=f"fullcontent_{hash(doc_path)}"):
+                if st.button(f"📄 View Full Filing", key=f"fullcontent_{i}_{accession}"):
                     st.session_state[view_state_key] = 'content' if st.session_state[view_state_key] != 'content' else None
             
             active_view = st.session_state.get(view_state_key)
-
+            
             if active_view:
-                with st.spinner("Fetching full document from data hub..."):
-                    # Use the improved path parsing function
-                    ticker, filename_part = extract_ticker_and_filename_from_path(doc_path)
-                    
-                    if not ticker:
-                        # Fallback to selected company if we can't parse ticker
-                        ticker = selected_company
-                        filename_part = filename
-                    
-                    try:
-                        # Try to get content from hub
-                        content = get_filing_content_from_hub(ticker, filename_part)
-                        
-                        if not content and ticker != selected_company:
-                            # Retry with selected company as fallback
-                            content = get_filing_content_from_hub(selected_company, filename)
-                        
-                        if content:
-                            if active_view == 'summary':
-                                # Generate AI summary
-                                try:
-                                    soup = BeautifulSoup(content, 'html.parser')
-                                    clean_content = soup.get_text(strip=True)[:20000]  # Limit content length
-                                    
-                                    summary_prompt = f"Provide a concise, professional executive summary of the following document. Focus on financial performance, key business segments, risk factors, and future outlook. Use bullet points.\n\nDOCUMENT CONTENT:\n\n{clean_content}"
-                                    
-                                    response = qual_brain.groq_client.chat.completions.create(
-                                        model=GROQ_LLM_MODEL,
-                                        messages=[{"role": "user", "content": summary_prompt}],
-                                        temperature=0.2
-                                    )
-                                    
-                                    summary_content = response.choices[0].message.content
-                                    st.markdown(f'<div style="background-color: #1E293B; padding: 20px; border-radius: 8px; color: white;">{summary_content}</div>', unsafe_allow_html=True)
-                                    
-                                except Exception as e:
-                                    st.error(f"Failed to generate AI summary: {e}")
-                                    st.info("This might be due to API limits or connection issues. Please try again later.")
+                content = filing.get('content', '')
+                
+                if active_view == 'summary':
+                    with st.spinner("🤖 Generating AI summary..."):
+                        try:
+                            # Extract clean text for summary
+                            soup = BeautifulSoup(content, 'html.parser')
+                            clean_content = soup.get_text()[:15000]  # Limit for API
                             
-                            elif active_view == 'paragraphs':
-                                # Extract relevant paragraphs
-                                try:
-                                    relevant_paragraphs = extract_relevant_paragraphs(content, query_keywords)
-                                    if relevant_paragraphs:
-                                        st.markdown("**🎯 Most Relevant Paragraphs:**")
-                                        for para in relevant_paragraphs:
-                                            st.info(para)
-                                    else:
-                                        st.info("💡 No highly relevant paragraphs found based on your query.")
-                                except Exception as e:
-                                    st.error(f"Failed to extract paragraphs: {e}")
+                            summary_prompt = f"""Analyze this {filing_type} SEC filing for {company_name} and provide a comprehensive executive summary.
+
+                                Focus on:
+                                - Key financial highlights and performance metrics
+                                - Major business developments and strategic initiatives  
+                                - Risk factors and challenges mentioned
+                                - Management outlook and forward guidance
+                                - Any significant changes from previous periods
+                                
+                                Keep the summary under 400 words and use bullet points for clarity.
+                                
+                                FILING CONTENT:
+                                {clean_content}"""
                             
-                            elif active_view == 'content':
-                                # Show full content
-                                try:
-                                    soup = BeautifulSoup(content, 'html.parser')
-                                    clean_content = soup.get_text(separator='\n', strip=True)
-                                    
-                                    # Limit display to avoid performance issues
-                                    if len(clean_content) > 50000:
-                                        st.warning("Document is very large. Showing first 50,000 characters.")
-                                        clean_content = clean_content[:50000] + "\n\n... [Content truncated for display]"
-                                    
-                                    st.text_area("Full Document Content", clean_content, height=400, key=f"content_{hash(doc_path)}")
-                                    
-                                except Exception as e:
-                                    st.error(f"Failed to display content: {e}")
-                        else:
-                            # Show debugging information
-                            st.warning("Could not retrieve the full content for this document.")
-                            st.info(f"**Debug Info:**")
-                            st.info(f"- Original path: `{doc_path}`")
-                            st.info(f"- Parsed ticker: `{ticker}`")
-                            st.info(f"- Parsed filename: `{filename_part}`")
-                            st.info("Please check if the document exists in the data source.")
+                            response = qual_brain.groq_client.chat.completions.create(
+                                model=GROQ_LLM_MODEL,
+                                messages=[{"role": "user", "content": summary_prompt}],
+                                temperature=0.2,
+                                max_tokens=600
+                            )
                             
-                    except Exception as e:
-                        st.error(f"Error accessing document content: {e}")
-                        st.info("This might be due to file path issues or missing files in the data source.")
+                            summary_content = response.choices[0].message.content
+                            st.markdown(f"""
+                            <div style="background: linear-gradient(135deg, #1E293B 0%, #334155 100%); 
+                                       padding: 25px; border-radius: 12px; color: white; 
+                                       border-left: 5px solid #3B82F6; margin: 20px 0;">
+                                <h4 style="margin: 0 0 15px 0; color: #60A5FA;">🤖 AI Executive Summary</h4>
+                                <div style="line-height: 1.6;">{summary_content}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        except Exception as e:
+                            st.error(f"Failed to generate AI summary: {e}")
+                            st.info("This might be due to API limits. Please try again later.")
+                
+                elif active_view == 'sections':
+                    with st.spinner("📄 Extracting document sections..."):
+                        try:
+                            sections = extract_document_sections(content)
+                            
+                            if sections:
+                                st.markdown("**📋 Document Sections Found:**")
+                                for section_type, section_content in sections.items():
+                                    with st.expander(f"📄 {section_type}", expanded=False):
+                                        # Clean and display section content
+                                        soup = BeautifulSoup(section_content, 'html.parser')
+                                        clean_section = soup.get_text()
+                                        
+                                        if len(clean_section) > 5000:
+                                            st.info("📄 Section is very long. Showing first 5,000 characters.")
+                                            clean_section = clean_section[:5000] + "\n\n... [Content truncated]"
+                                        
+                                        st.text_area(f"{section_type} Content", clean_section, height=300, key=f"section_{section_type}_{i}")
+                            else:
+                                st.warning("No distinct document sections found in this filing.")
+                                
+                        except Exception as e:
+                            st.error(f"Failed to extract sections: {e}")
+                
+                elif active_view == 'content':
+                    with st.spinner("📄 Preparing full filing content..."):
+                        try:
+                            # Clean up the content
+                            soup = BeautifulSoup(content, 'html.parser')
+                            clean_content = soup.get_text(separator='\n')
+                            
+                            if len(clean_content) > 50000:
+                                st.warning("📄 Filing is very large. Showing first 50,000 characters.")
+                                clean_content = clean_content[:50000] + "\n\n... [Content truncated for display]"
+                            
+                            st.markdown("#### 📄 Full SEC Filing Content")
+                            st.text_area(
+                                "Filing Content", 
+                                clean_content, 
+                                height=500, 
+                                key=f"content_full_{i}_{accession}",
+                                help="Complete text content of the SEC filing"
+                            )
+                            
+                        except Exception as e:
+                            st.error(f"Failed to display content: {e}")
 
 # --- Main Dashboard ---
 st.markdown(f'<h1 class="main-header">AI Corporate Intelligence: {selected_company}</h1>', unsafe_allow_html=True)
@@ -715,5 +858,6 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
