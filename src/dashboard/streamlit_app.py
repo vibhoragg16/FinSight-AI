@@ -80,8 +80,16 @@ def load_json_from_hub(repo_id, filename):
 def get_filing_content_from_hub(ticker, filename):
     """Downloads a raw filing file from HF Hub and returns its content."""
     try:
-        # Construct the path as it exists in the HF repo
-        repo_file_path = f"data/raw/sec-edgar-filings/{ticker}/{filename}"
+        # Handle different possible path formats
+        if filename.startswith('data/'):
+            # Already has full path
+            repo_file_path = filename
+        elif '/' in filename and 'sec-edgar-filings' in filename:
+            # Already formatted path
+            repo_file_path = filename
+        else:
+            # Just filename, construct the path
+            repo_file_path = f"data/raw/sec-edgar-filings/{ticker}/{filename}"
 
         file_path = hf_hub_download(
             repo_id=HF_REPO_ID,
@@ -93,6 +101,67 @@ def get_filing_content_from_hub(ticker, filename):
     except Exception as e:
         logging.error(f"Failed to load filing {filename} for {ticker}: {e}")
         return None
+        
+@st.cache_data(ttl=3600)
+def extract_ticker_and_filename_from_path(doc_path):
+    """
+    Extract ticker and filename from various document path formats.
+    Returns tuple (ticker, filename) or (None, None) if parsing fails.
+    """
+    try:
+        # Normalize path separators
+        normalized_path = str(PurePath(doc_path))
+        
+        # Common patterns to match
+        patterns = [
+            # Pattern 1: ...sec-edgar-filings/TICKER/some/path/file.html
+            r'sec-edgar-filings[/\\]([A-Z]+)[/\\](.+)$',
+            # Pattern 2: TICKER/file.html (simple format)
+            r'^([A-Z]+)[/\\]([^/\\]+\.html)$',
+            # Pattern 3: Any path ending with TICKER_something.html
+            r'([A-Z]+)_[^/\\]*\.html$',
+            # Pattern 4: Path containing ticker in the filename
+            r'[/\\]([A-Z]+)[_-][^/\\]*\.html$'
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, normalized_path)
+            if match:
+                if len(match.groups()) == 2:
+                    ticker, filename = match.groups()
+                    return ticker, filename
+                elif len(match.groups()) == 1:
+                    # Extract ticker from filename
+                    filename = os.path.basename(normalized_path)
+                    ticker = match.group(1)
+                    return ticker, filename
+        
+        # Fallback: try to extract from the path components
+        path_parts = normalized_path.replace('\\', '/').split('/')
+        
+        # Look for sec-edgar-filings in the path
+        if 'sec-edgar-filings' in path_parts:
+            try:
+                sec_index = path_parts.index('sec-edgar-filings')
+                if sec_index + 1 < len(path_parts):
+                    ticker = path_parts[sec_index + 1]
+                    filename = '/'.join(path_parts[sec_index + 2:])
+                    return ticker, filename
+            except (ValueError, IndexError):
+                pass
+        
+        # Last resort: try to find ticker in filename
+        filename = os.path.basename(normalized_path)
+        ticker_match = re.search(r'([A-Z]{2,5})', filename)
+        if ticker_match:
+            return ticker_match.group(1), filename
+            
+        return None, None
+        
+    except Exception as e:
+        logging.error(f"Error parsing path {doc_path}: {e}")
+        return None, None
+
 
 @st.cache_resource
 def init_brains():
@@ -186,18 +255,23 @@ def run_ai_analysis(ticker, market_df, news_df, financials_df):
 # --- Enhanced Source Display Functions ---
 def get_sec_link(filename, selected_company):
     """Generate SEC EDGAR link if possible"""
-    company_ciks = {
-        'AAPL': '0000320193', 'MSFT': '0000789019', 'GOOGL': '0001652044',
-        'AMZN': '0001018724', 'TSLA': '0001318605', 'META': '0001326801',
-        'NVDA': '0001045810', 'BRK.B': '0001067983', 'JNJ': '0000200406',
-        'V': '0001403161',
-    }
-    accession_match = re.search(r'(\d{10}-\d{2}-\d{6})', filename)
-    if accession_match and selected_company in company_ciks:
-        cik = company_ciks.get(selected_company)
-        accession = accession_match.group(1)
-        if cik:
-            return f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession.replace('-', '')}/{filename}"
+    try:
+        company_ciks = {
+            'AAPL': '0000320193', 'MSFT': '0000789019', 'GOOGL': '0001652044',
+            'AMZN': '0001018724', 'TSLA': '0001318605', 'META': '0001326801',
+            'NVDA': '0001045810', 'BRK.B': '0001067983', 'JNJ': '0000200406',
+            'V': '0001403161',
+        }
+        
+        accession_match = re.search(r'(\d{10}-\d{2}-\d{6})', filename)
+        if accession_match and selected_company in company_ciks:
+            cik = company_ciks.get(selected_company)
+            accession = accession_match.group(1)
+            if cik:
+                return f"https://www.sec.gov/Archives/edgar/data/{cik}/{accession.replace('-', '')}/{filename}"
+    except Exception as e:
+        logging.error(f"Error generating SEC link: {e}")
+    
     return None
 
 def extract_relevant_paragraphs(content, query_keywords, max_paragraphs=3):
@@ -205,34 +279,44 @@ def extract_relevant_paragraphs(content, query_keywords, max_paragraphs=3):
     if not query_keywords:
         return []
 
-    # Use BeautifulSoup to parse and get clean text
-    soup = BeautifulSoup(content, 'html.parser')
+    try:
+        # Use BeautifulSoup to parse and get clean text
+        soup = BeautifulSoup(content, 'html.parser')
+        
+        # Remove script and style elements
+        for script in soup(["script", "style"]):
+            script.decompose()
 
-    # Get all text and split into potential paragraphs
-    all_text = soup.get_text(separator='\n', strip=True)
-    # Filter for longer paragraphs that are more likely to contain prose
-    paragraphs = [p.strip() for p in all_text.split('\n') if len(p.strip()) > 150]
+        # Get all text and split into potential paragraphs
+        all_text = soup.get_text(separator='\n', strip=True)
+        # Filter for longer paragraphs that are more likely to contain prose
+        paragraphs = [p.strip() for p in all_text.split('\n') if len(p.strip()) > 150]
 
-    scored_paragraphs = []
-    for para in paragraphs:
-        # Simple scoring: count keyword occurrences
-        score = sum(1 for keyword in query_keywords if keyword.lower() in para.lower())
-        # Penalize paragraphs that look like code/links
-        if 'http' in para or '/' in para or len(para.split()) < 15:
-            score -= 5
+        scored_paragraphs = []
+        for para in paragraphs:
+            # Simple scoring: count keyword occurrences
+            score = sum(1 for keyword in query_keywords if keyword.lower() in para.lower())
+            # Penalize paragraphs that look like code/links/tables
+            if para.count('http') > 2 or para.count('|') > 5 or len(para.split()) < 15:
+                score -= 2
 
-        if score > 0:
-            scored_paragraphs.append((score, para))
+            if score > 0:
+                scored_paragraphs.append((score, para))
 
-    scored_paragraphs.sort(key=lambda x: x[0], reverse=True)
-    return [para for score, para in scored_paragraphs[:max_paragraphs]]
-
+        scored_paragraphs.sort(key=lambda x: x[0], reverse=True)
+        return [para for score, para in scored_paragraphs[:max_paragraphs]]
+        
+    except Exception as e:
+        logging.error(f"Error extracting paragraphs: {e}")
+        return []
 
 def display_enhanced_sources(sources, prompt=""):
     """
-    Enhanced source display with direct content access, full-width views,
-    and AI-powered analysis capabilities, fetching data from Hugging Face Hub.
+    Enhanced source display with robust path parsing and error handling.
     """
+    if not sources:
+        return
+        
     st.markdown("---")
     st.markdown("""
     <div style="padding: 15px; background: linear-gradient(90deg, #28a745 0%, #20c997 100%); border-radius: 8px; margin: 20px 0;">
@@ -253,74 +337,106 @@ def display_enhanced_sources(sources, prompt=""):
     query_keywords = prompt.lower().split() if prompt else []
 
     for doc_path, doc_refs in doc_sources.items():
-        if doc_path != "Unknown":
-            view_state_key = f'active_view_{hash(doc_path)}'
-            st.session_state.setdefault(view_state_key, None)
-
-            filename = os.path.basename(doc_path)
-            doc_type = "SEC Filing" if doc_path.endswith('.html') else "Financial Data"
+        if doc_path == "Unknown":
+            continue
             
-            with st.expander(f"📄 {filename} - {doc_type}", expanded=True):
-                filing_type = None
-                if doc_path.endswith('.html'):
-                    if '10-k' in filename.lower(): filing_type = "10-K Annual Report"
-                    elif '10-q' in filename.lower(): filing_type = "10-Q Quarterly Report"
-                    elif '8-k' in filename.lower(): filing_type = "8-K Current Report"
-                
-                sec_link = get_sec_link(filename, selected_company)
-                if filing_type:
-                    st.markdown(f'<div style="padding: 12px; background-color: #007bff; color: white; border-radius: 5px; margin-bottom: 15px;"><strong>📋 {filing_type.upper()}</strong></div>', unsafe_allow_html=True)
-                if sec_link:
-                    st.markdown(f'<div style="padding: 15px; background-color: #e3f2fd; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2196f3;"><h4 style="margin: 0 0 10px 0; color: #1976d2;">🔗 Direct SEC EDGAR Link</h4><a href="{sec_link}" target="_blank" style="color: #1976d2; text-decoration: none; font-weight: bold;">📊 View Official Filing on SEC.gov</a></div>', unsafe_allow_html=True)
+        view_state_key = f'active_view_{hash(doc_path)}'
+        st.session_state.setdefault(view_state_key, None)
 
-                st.markdown("### 📝 Relevant Content from This Document")
-                for i, ref in enumerate(doc_refs, 1):
-                    snippet = ref.page_content
-                    st.markdown(f"""
-                    <div style="border-left: 4px solid #007bff; padding-left: 15px; margin: 15px 0; background-color: rgba(0, 123, 255, 0.05); border-radius: 5px;">
-                        <h5 style="color: #00aaff; margin-top: 5px; margin-bottom: 10px;">📍 Reference {i}</h5>
-                        <p style="margin: 0; line-height: 1.6; color: #e0e0e0; font-size: 16px;">{snippet}</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+        filename = os.path.basename(doc_path)
+        doc_type = "SEC Filing" if doc_path.endswith('.html') else "Financial Data"
+        
+        with st.expander(f"📄 {filename} - {doc_type}", expanded=True):
+            # Display filing type
+            filing_type = None
+            if doc_path.endswith('.html'):
+                if '10-k' in filename.lower(): 
+                    filing_type = "10-K Annual Report"
+                elif '10-q' in filename.lower(): 
+                    filing_type = "10-Q Quarterly Report"
+                elif '8-k' in filename.lower(): 
+                    filing_type = "8-K Current Report"
+            
+            # Try to get SEC link
+            sec_link = get_sec_link(filename, selected_company)
+            
+            if filing_type:
+                st.markdown(f'<div style="padding: 12px; background-color: #007bff; color: white; border-radius: 5px; margin-bottom: 15px;"><strong>📋 {filing_type.upper()}</strong></div>', unsafe_allow_html=True)
+            
+            if sec_link:
+                st.markdown(f'<div style="padding: 15px; background-color: #e3f2fd; border-radius: 8px; margin: 15px 0; border-left: 4px solid #2196f3;"><h4 style="margin: 0 0 10px 0; color: #1976d2;">🔗 Direct SEC EDGAR Link</h4><a href="{sec_link}" target="_blank" style="color: #1976d2; text-decoration: none; font-weight: bold;">📊 View Official Filing on SEC.gov</a></div>', unsafe_allow_html=True)
 
-                st.markdown("---")
-                st.markdown("### 📁 Advanced Analysis & Access Options")
-                
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    if st.button(f"🤖 Generate AI Summary", key=f"summary_{hash(doc_path)}"):
-                        st.session_state[view_state_key] = 'summary' if st.session_state[view_state_key] != 'summary' else None
-                with col2:
-                    if st.button(f"📖 Extract Key Paragraphs", key=f"paragraphs_{hash(doc_path)}"):
-                        st.session_state[view_state_key] = 'paragraphs' if st.session_state[view_state_key] != 'paragraphs' else None
-                with col3:
-                    if st.button(f"📄 View Complete Content", key=f"fullcontent_{hash(doc_path)}"):
-                        st.session_state[view_state_key] = 'content' if st.session_state[view_state_key] != 'content' else None
-                
-                active_view = st.session_state.get(view_state_key)
+            # Display relevant content
+            st.markdown("### 📝 Relevant Content from This Document")
+            for i, ref in enumerate(doc_refs, 1):
+                snippet = ref.page_content
+                st.markdown(f"""
+                <div style="border-left: 4px solid #007bff; padding-left: 15px; margin: 15px 0; background-color: rgba(0, 123, 255, 0.05); border-radius: 5px;">
+                    <h5 style="color: #00aaff; margin-top: 5px; margin-bottom: 10px;">📍 Reference {i}</h5>
+                    <p style="margin: 0; line-height: 1.6; color: #e0e0e0; font-size: 16px;">{snippet}</p>
+                </div>
+                """, unsafe_allow_html=True)
 
-                if active_view:
-                    with st.spinner("Fetching full document from data hub..."):
-                        # FIX: Use pathlib to robustly handle cross-platform paths
-                        normalized_path = PurePath(doc_path).as_posix()
-                        path_parts = normalized_path.split('/')
+            st.markdown("---")
+            st.markdown("### 📁 Advanced Analysis & Access Options")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button(f"🤖 Generate AI Summary", key=f"summary_{hash(doc_path)}"):
+                    st.session_state[view_state_key] = 'summary' if st.session_state[view_state_key] != 'summary' else None
+            with col2:
+                if st.button(f"📖 Extract Key Paragraphs", key=f"paragraphs_{hash(doc_path)}"):
+                    st.session_state[view_state_key] = 'paragraphs' if st.session_state[view_state_key] != 'paragraphs' else None
+            with col3:
+                if st.button(f"📄 View Complete Content", key=f"fullcontent_{hash(doc_path)}"):
+                    st.session_state[view_state_key] = 'content' if st.session_state[view_state_key] != 'content' else None
+            
+            active_view = st.session_state.get(view_state_key)
+
+            if active_view:
+                with st.spinner("Fetching full document from data hub..."):
+                    # Use the improved path parsing function
+                    ticker, filename_part = extract_ticker_and_filename_from_path(doc_path)
+                    
+                    if not ticker:
+                        # Fallback to selected company if we can't parse ticker
+                        ticker = selected_company
+                        filename_part = filename
+                    
+                    try:
+                        # Try to get content from hub
+                        content = get_filing_content_from_hub(ticker, filename_part)
                         
-                        try:
-                            sec_filings_index = path_parts.index('sec-edgar-filings')
-                            ticker_from_path = path_parts[sec_filings_index + 1]
-                            filing_key = "/".join(path_parts[sec_filings_index + 2:])
-                            content = get_filing_content_from_hub(ticker_from_path, filing_key)
-
-                            if content:
-                                if active_view == 'summary':
+                        if not content and ticker != selected_company:
+                            # Retry with selected company as fallback
+                            content = get_filing_content_from_hub(selected_company, filename)
+                        
+                        if content:
+                            if active_view == 'summary':
+                                # Generate AI summary
+                                try:
                                     soup = BeautifulSoup(content, 'html.parser')
-                                    clean_content = soup.get_text(strip=True)[:20000]
+                                    clean_content = soup.get_text(strip=True)[:20000]  # Limit content length
+                                    
                                     summary_prompt = f"Provide a concise, professional executive summary of the following document. Focus on financial performance, key business segments, risk factors, and future outlook. Use bullet points.\n\nDOCUMENT CONTENT:\n\n{clean_content}"
-                                    response = qual_brain.groq_client.chat.completions.create(model=GROQ_LLM_MODEL, messages=[{"role": "user", "content": summary_prompt}], temperature=0.2)
-                                    st.markdown(f'<div style="background-color: #1E293B; padding: 20px; border-radius: 8px;">{response.choices[0].message.content}</div>', unsafe_allow_html=True)
-                                
-                                elif active_view == 'paragraphs':
+                                    
+                                    response = qual_brain.groq_client.chat.completions.create(
+                                        model=GROQ_LLM_MODEL,
+                                        messages=[{"role": "user", "content": summary_prompt}],
+                                        temperature=0.2
+                                    )
+                                    
+                                    summary_content = response.choices[0].message.content
+                                    st.markdown(f'<div style="background-color: #1E293B; padding: 20px; border-radius: 8px; color: white;">{summary_content}</div>', unsafe_allow_html=True)
+                                    
+                                except Exception as e:
+                                    st.error(f"Failed to generate AI summary: {e}")
+                                    st.info("This might be due to API limits or connection issues. Please try again later.")
+                            
+                            elif active_view == 'paragraphs':
+                                # Extract relevant paragraphs
+                                try:
                                     relevant_paragraphs = extract_relevant_paragraphs(content, query_keywords)
                                     if relevant_paragraphs:
                                         st.markdown("**🎯 Most Relevant Paragraphs:**")
@@ -328,15 +444,37 @@ def display_enhanced_sources(sources, prompt=""):
                                             st.info(para)
                                     else:
                                         st.info("💡 No highly relevant paragraphs found based on your query.")
-                                
-                                elif active_view == 'content':
+                                except Exception as e:
+                                    st.error(f"Failed to extract paragraphs: {e}")
+                            
+                            elif active_view == 'content':
+                                # Show full content
+                                try:
                                     soup = BeautifulSoup(content, 'html.parser')
                                     clean_content = soup.get_text(separator='\n', strip=True)
-                                    st.code(clean_content, language=None)
-                            else:
-                                st.warning("Could not retrieve the full content for this document from the data hub.")
-                        except (ValueError, IndexError):
-                            st.error("Could not parse the document path correctly. Please check the file paths in your data source.")
+                                    
+                                    # Limit display to avoid performance issues
+                                    if len(clean_content) > 50000:
+                                        st.warning("Document is very large. Showing first 50,000 characters.")
+                                        clean_content = clean_content[:50000] + "\n\n... [Content truncated for display]"
+                                    
+                                    st.text_area("Full Document Content", clean_content, height=400, key=f"content_{hash(doc_path)}")
+                                    
+                                except Exception as e:
+                                    st.error(f"Failed to display content: {e}")
+                        else:
+                            # Show debugging information
+                            st.warning("Could not retrieve the full content for this document.")
+                            st.info(f"**Debug Info:**")
+                            st.info(f"- Original path: `{doc_path}`")
+                            st.info(f"- Parsed ticker: `{ticker}`")
+                            st.info(f"- Parsed filename: `{filename_part}`")
+                            st.info("Please check if the document exists in the data source.")
+                            
+                    except Exception as e:
+                        st.error(f"Error accessing document content: {e}")
+                        st.info("This might be due to file path issues or missing files in the data source.")
+
 # --- Main Dashboard ---
 st.markdown(f'<h1 class="main-header">AI Corporate Intelligence: {selected_company}</h1>', unsafe_allow_html=True)
 
@@ -577,3 +715,4 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
