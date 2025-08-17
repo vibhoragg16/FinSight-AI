@@ -298,42 +298,42 @@ def display_enhanced_sources(sources, prompt=""):
                     if st.button(f"📄 View Complete Content", key=f"fullcontent_{hash(doc_path)}"):
                         st.session_state[view_state_key] = 'content' if st.session_state[view_state_key] != 'content' else None
                 
-                # The download button requires the file to be present, so it's best to fetch it first.
-                # For simplicity in a deployed environment, we can provide the SEC link as the primary download method.
-                
                 active_view = st.session_state.get(view_state_key)
 
                 if active_view:
                     with st.spinner("Fetching full document from data hub..."):
-                        # Extract the ticker and the rest of the path from the full doc_path
-                        path_parts = doc_path.split(os.sep)
-                        ticker_from_path = path_parts[path_parts.index('sec-edgar-filings') + 1]
-                        filing_key = os.path.join(*path_parts[path_parts.index('sec-edgar-filings') + 2:])
+                        # FIX: Normalize path separators to handle both Windows and Linux
+                        normalized_path = doc_path.replace("\\", "/")
+                        path_parts = normalized_path.split('/')
+                        
+                        if 'sec-edgar-filings' in path_parts:
+                            ticker_from_path = path_parts[path_parts.index('sec-edgar-filings') + 1]
+                            filing_key = "/".join(path_parts[path_parts.index('sec-edgar-filings') + 2:])
+                            content = get_filing_content_from_hub(ticker_from_path, filing_key)
 
-                        content = get_filing_content_from_hub(ticker_from_path, filing_key)
-
-                        if content:
-                            if active_view == 'summary':
-                                soup = BeautifulSoup(content, 'html.parser')
-                                clean_content = soup.get_text(strip=True)[:20000]
-                                summary_prompt = f"Provide a concise, professional executive summary of the following document. Focus on financial performance, key business segments, risk factors, and future outlook. Use bullet points.\n\nDOCUMENT CONTENT:\n\n{clean_content}"
-                                response = qual_brain.groq_client.chat.completions.create(model=GROQ_LLM_MODEL, messages=[{"role": "user", "content": summary_prompt}], temperature=0.2)
-                                st.markdown(f'<div style="background-color: #1E293B; padding: 20px; border-radius: 8px;">{response.choices[0].message.content}</div>', unsafe_allow_html=True)
-                            
-                            elif active_view == 'paragraphs':
-                                relevant_paragraphs = extract_relevant_paragraphs(content, query_keywords)
-                                if relevant_paragraphs:
-                                    st.markdown("**🎯 Most Relevant Paragraphs:**")
-                                    for para in relevant_paragraphs:
-                                        st.info(para)
-                                else:
-                                    st.info("💡 No highly relevant paragraphs found based on your query.")
-                            
-                            elif active_view == 'content':
-                                soup = BeautifulSoup(content, 'html.parser')
-                                clean_content = soup.get_text(separator='\n', strip=True)
-                                st.code(clean_content, language=None)
+                            if content:
+                                if active_view == 'summary':
+                                    soup = BeautifulSoup(content, 'html.parser')
+                                    clean_content = soup.get_text(strip=True)[:20000]
+                                    summary_prompt = f"Provide a concise, professional executive summary of the following document. Focus on financial performance, key business segments, risk factors, and future outlook. Use bullet points.\n\nDOCUMENT CONTENT:\n\n{clean_content}"
+                                    response = qual_brain.groq_client.chat.completions.create(model=GROQ_LLM_MODEL, messages=[{"role": "user", "content": summary_prompt}], temperature=0.2)
+                                    st.markdown(f'<div style="background-color: #1E293B; padding: 20px; border-radius: 8px;">{response.choices[0].message.content}</div>', unsafe_allow_html=True)
                                 
+                                elif active_view == 'paragraphs':
+                                    relevant_paragraphs = extract_relevant_paragraphs(content, query_keywords)
+                                    if relevant_paragraphs:
+                                        st.markdown("**🎯 Most Relevant Paragraphs:**")
+                                        for para in relevant_paragraphs:
+                                            st.info(para)
+                                    else:
+                                        st.info("💡 No highly relevant paragraphs found based on your query.")
+                                
+                                elif active_view == 'content':
+                                    soup = BeautifulSoup(content, 'html.parser')
+                                    clean_content = soup.get_text(separator='\n', strip=True)
+                                    st.code(clean_content, language=None)
+                        else:
+                            st.error("Could not parse the document path correctly.")                                
 # --- Main Dashboard ---
 st.markdown(f'<h1 class="main-header">AI Corporate Intelligence: {selected_company}</h1>', unsafe_allow_html=True)
 
@@ -574,6 +574,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
