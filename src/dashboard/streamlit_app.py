@@ -73,13 +73,13 @@ def load_json_from_hub(repo_id, filename):
     except Exception as e:
         logging.error(f"Failed to load JSON {filename}: {e}")
         return pd.DataFrame()
-        
+
 @st.cache_data(ttl=3600)
 def get_filing_content_from_hub(ticker, filename):
     """Downloads a raw filing file from HF Hub and returns its content."""
     try:
         # Construct the path as it exists in the HF repo
-        repo_file_path = f"data/raw/sec-edgar-filings/{ticker}/{filename.split('/')[0]}/{filename.split('/')[1]}"
+        repo_file_path = f"data/raw/sec-edgar-filings/{ticker}/{filename}"
 
         file_path = hf_hub_download(
             repo_id=HF_REPO_ID,
@@ -103,17 +103,17 @@ def init_brains():
             st.error("🔑 GROQ_API_KEY is required. Please add it to your Streamlit secrets.")
             st.info("Go to your app settings and add GROQ_API_KEY to the secrets section.")
             st.stop()
-        
+
         # Set the environment variable if it's from secrets so the client can find it
         if "GROQ_API_KEY" not in os.environ:
             os.environ["GROQ_API_KEY"] = groq_key
-        
+
         # Initialize the brains
         qual_brain = QualitativeBrain()
         quant_brain = QuantitativeBrain()
-        
+
         return qual_brain, quant_brain
-        
+
     except ValueError as e:
         st.error(f"🚫 Configuration Error: {e}")
         st.info("Please check your API key configuration in Streamlit secrets.")
@@ -121,10 +121,10 @@ def init_brains():
     except Exception as e:
         st.error(f"❌ Initialization Error: Could not initialize AI components.")
         st.error(f"Details: {e}")
-        
+
         if "proxies" in str(e).lower():
             st.warning("🔧 This looks like a package compatibility issue. The fix is likely in the 'qualitative_brain.py' file.")
-        
+
         st.stop()
 
 # --- App State & Initialization ---
@@ -148,11 +148,11 @@ def load_company_data(ticker):
     market_df = load_csv_from_hub(HF_REPO_ID, f"data/market_data/{ticker}_market_data.csv")
     news_df_raw = load_json_from_hub(HF_REPO_ID, f"data/news/{ticker}_news.json")
     financials_df = load_csv_from_hub(HF_REPO_ID, f"data/processed/{ticker}/{ticker}_financials_quarterly.csv")
-    
+
     # --- Data Processing ---
     if not market_df.empty:
         market_df['Date'] = pd.to_datetime(market_df['Date'], utc=True, errors='coerce').dt.tz_convert(None)
-    
+
     news_df = pd.DataFrame()
     if not news_df_raw.empty and 'articles' in news_df_raw:
         try:
@@ -162,7 +162,7 @@ def load_company_data(ticker):
             news_df = articles_df
         except Exception as e:
             logging.error(f"Error normalizing news data for {ticker}: {e}")
-            
+
     return market_df, news_df, financials_df
 
 market_data, news_data, financials_data = load_company_data(selected_company)
@@ -259,14 +259,14 @@ def display_enhanced_sources(sources, prompt=""):
 
             filename = os.path.basename(doc_path)
             doc_type = "SEC Filing" if doc_path.endswith('.html') else "Financial Data"
-            
+
             with st.expander(f"📄 {filename} - {doc_type}", expanded=True):
                 filing_type = None
                 if doc_path.endswith('.html'):
                     if '10-k' in filename.lower(): filing_type = "10-K Annual Report"
                     elif '10-q' in filename.lower(): filing_type = "10-Q Quarterly Report"
                     elif '8-k' in filename.lower(): filing_type = "8-K Current Report"
-                
+
                 sec_link = get_sec_link(filename, selected_company)
                 if filing_type:
                     st.markdown(f'<div style="padding: 12px; background-color: #007bff; color: white; border-radius: 5px; margin-bottom: 15px;"><strong>📋 {filing_type.upper()}</strong></div>', unsafe_allow_html=True)
@@ -285,9 +285,9 @@ def display_enhanced_sources(sources, prompt=""):
 
                 st.markdown("---")
                 st.markdown("### 📁 Advanced Analysis & Access Options")
-                
+
                 col1, col2, col3, col4 = st.columns(4)
-                
+
                 with col1:
                     if st.button(f"🤖 Generate AI Summary", key=f"summary_{hash(doc_path)}"):
                         st.session_state[view_state_key] = 'summary' if st.session_state[view_state_key] != 'summary' else None
@@ -297,15 +297,15 @@ def display_enhanced_sources(sources, prompt=""):
                 with col3:
                     if st.button(f"📄 View Complete Content", key=f"fullcontent_{hash(doc_path)}"):
                         st.session_state[view_state_key] = 'content' if st.session_state[view_state_key] != 'content' else None
-                
+
                 active_view = st.session_state.get(view_state_key)
 
                 if active_view:
                     with st.spinner("Fetching full document from data hub..."):
                         # FIX: Normalize path separators to handle both Windows and Linux
-                        normalized_path = doc_path.replace("\\", "/")
+                        normalized_path = doc_path.replace("\\\\", "/")
                         path_parts = normalized_path.split('/')
-                        
+
                         if 'sec-edgar-filings' in path_parts:
                             ticker_from_path = path_parts[path_parts.index('sec-edgar-filings') + 1]
                             filing_key = "/".join(path_parts[path_parts.index('sec-edgar-filings') + 2:])
@@ -315,10 +315,10 @@ def display_enhanced_sources(sources, prompt=""):
                                 if active_view == 'summary':
                                     soup = BeautifulSoup(content, 'html.parser')
                                     clean_content = soup.get_text(strip=True)[:20000]
-                                    summary_prompt = f"Provide a concise, professional executive summary of the following document. Focus on financial performance, key business segments, risk factors, and future outlook. Use bullet points.\n\nDOCUMENT CONTENT:\n\n{clean_content}"
+                                    summary_prompt = f"Provide a concise, professional executive summary of the following document. Focus on financial performance, key business segments, risk factors, and future outlook. Use bullet points.\\n\\nDOCUMENT CONTENT:\\n\\n{clean_content}"
                                     response = qual_brain.groq_client.chat.completions.create(model=GROQ_LLM_MODEL, messages=[{"role": "user", "content": summary_prompt}], temperature=0.2)
                                     st.markdown(f'<div style="background-color: #1E293B; padding: 20px; border-radius: 8px;">{response.choices[0].message.content}</div>', unsafe_allow_html=True)
-                                
+
                                 elif active_view == 'paragraphs':
                                     relevant_paragraphs = extract_relevant_paragraphs(content, query_keywords)
                                     if relevant_paragraphs:
@@ -327,13 +327,13 @@ def display_enhanced_sources(sources, prompt=""):
                                             st.info(para)
                                     else:
                                         st.info("💡 No highly relevant paragraphs found based on your query.")
-                                
+
                                 elif active_view == 'content':
                                     soup = BeautifulSoup(content, 'html.parser')
-                                    clean_content = soup.get_text(separator='\n', strip=True)
+                                    clean_content = soup.get_text(separator='\\n', strip=True)
                                     st.code(clean_content, language=None)
                         else:
-                            st.error("Could not parse the document path correctly.")                                
+                            st.error("Could not parse the document path correctly.")
 # --- Main Dashboard ---
 st.markdown(f'<h1 class="main-header">AI Corporate Intelligence: {selected_company}</h1>', unsafe_allow_html=True)
 
@@ -384,14 +384,14 @@ with tab_market:
     if not market_data.empty:
         st.header("📈 Market Performance Analysis")
         st.markdown("*Real-time market data and performance metrics*")
-        
+
         col1, col2, col3 = st.columns(3)
         with col1:
             latest = market_data.iloc[-1]
             st.metric("Current Price", f"${latest['Close']:.2f}", f"{latest['Close'] - market_data.iloc[-2]['Close']:+.2f}")
         with col2: st.metric("Day Range", f"${latest['Low']:.2f} - ${latest['High']:.2f}")
         with col3: st.metric("Volume", f"{latest['Volume']:,}")
-        
+
         fig = go.Figure(data=[go.Candlestick(x=market_data['Date'], open=market_data['Open'], high=market_data['High'], low=market_data['Low'], close=market_data['Close'], name="Price")])
         fig.update_layout(title=f"{selected_company} Stock Price", xaxis_title="Date", yaxis_title="Price ($)", template="plotly_dark")
         st.plotly_chart(fig, use_container_width=True)
@@ -401,7 +401,7 @@ with tab_market:
 with tab_chat:
     st.header("🤖 AI Financial Analyst")
     st.markdown("*Your intelligent companion for financial analysis and SEC filing insights*")
-    
+
     st.markdown("""
     <div style="padding: 20px; background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%); border-radius: 10px; margin: 20px 0; border: 2px solid #3498db; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
     <div style="display: flex; justify-content: space-around; align-items: center; flex-wrap: wrap; gap: 25px;">
@@ -411,11 +411,11 @@ with tab_chat:
     </div>
     </div>
     """, unsafe_allow_html=True)
-    
+
     session_key = f"messages_{selected_company}"
     if session_key not in st.session_state:
         st.session_state[session_key] = []
-    
+
     # Display chat messages from history
     for message in st.session_state[session_key]:
         with st.chat_message(message["role"]):
@@ -426,7 +426,7 @@ with tab_chat:
     # Chat input
     chat_key = f"chat_input_{selected_company}"
     prompt = st.chat_input(f"Ask about {selected_company}'s financials...", key=chat_key)
-    
+
     if prompt:
         st.session_state[session_key].append({"role": "user", "content": prompt})
         with st.chat_message("user"):
@@ -439,9 +439,9 @@ with tab_chat:
                     st.markdown(response)
                     if sources:
                         display_enhanced_sources(sources, prompt)
-                    
+
                     st.session_state[session_key].append({
-                        "role": "assistant", "content": response, 
+                        "role": "assistant", "content": response,
                         "sources": sources, "prompt": prompt
                     })
                 except Exception as e:
@@ -452,10 +452,10 @@ with tab_chat:
 with tab_news:
     st.header("📰 Recent Company News")
     st.markdown("*Latest news and sentiment analysis for market insights*")
-    
+
     if not news_data.empty:
         display_df = news_data.copy()
-        
+
         # --- News Metrics (Unchanged) ---
         col1, col2, col3 = st.columns(3)
         with col1: st.metric("Total Articles", len(display_df))
@@ -463,7 +463,7 @@ with tab_news:
             latest_news = pd.to_datetime(display_df['publishedAt']).max() if 'publishedAt' in display_df else None
             if latest_news: st.metric("Latest News", latest_news.strftime('%Y-%m-%d'))
         with col3: st.metric("News Sources", display_df['source.name'].nunique() if 'source.name' in display_df else 0)
-        
+
         st.markdown("---")
 
         # --- New Two-Column News Card Layout ---
@@ -492,7 +492,7 @@ with tab_news:
 with tab_deep:
     st.header("💡 AI-Powered Deep Dive Analysis")
     st.markdown("*Comprehensive AI-generated insights and executive summary*")
-    
+
     if not market_data.empty:
         col1, col2, col3 = st.columns(3)
         with col1: st.metric("AI Health Score", f"{health_score:.1f}/100", "🟢 Strong" if health_score >= 70 else "🟡 Moderate" if health_score >= 50 else "🔴 Weak")
@@ -500,10 +500,10 @@ with tab_deep:
         with col3:
             sentiment_label = "Positive" if avg_sentiment > 0.1 else "Negative" if avg_sentiment < -0.1 else "Neutral"
             st.metric("News Sentiment", sentiment_label, f"{avg_sentiment:.2f}")
-        
+
         st.markdown("---")
         st.markdown("### 🤖 AI Executive Summary")
-        
+
         with st.spinner("🤖 AI is generating an executive summary..."):
             summary_prompt = f"Generate a comprehensive executive summary for {selected_company} based on: Health Score: {health_score:.1f}/100, Forecast: {prediction} ({confidence:.1%} confidence), and News Sentiment: {avg_sentiment:.2f}. Please provide key financial highlights, market position, risk factors, strategic recommendations, and future outlook in clear sections."
             try:
@@ -516,9 +516,9 @@ with tab_deep:
 
         st.markdown("---")
         st.markdown("### 🛠️ Advanced Analysis Tools")
-        
+
         col1, col2 = st.columns(2)
-        
+
         with col1:
             if st.button("📊 Generate Financial Ratios Analysis", key="financial_ratios"):
                 with st.spinner("Calculating financial ratios..."):
@@ -528,14 +528,14 @@ with tab_deep:
                         try:
                             # Unpack the ratios DataFrame AND the list of missing columns
                             ratios_df, missing_cols = calculate_all_ratios(financials_data)
-                            
+
                             latest_valid_row = ratios_df.dropna(how='all', subset=ratios_df.columns.drop('Date')).head(1)
-                            
+
                             if not latest_valid_row.empty:
                                 st.success("✅ Financial Ratios Calculated Successfully!")
                                 latest_date = latest_valid_row['Date'].iloc[0]
                                 st.markdown(f"#### Latest Available Financial Ratios (as of {pd.to_datetime(latest_date).strftime('%Y-%m-%d')})")
-                                
+
                                 display_df = latest_valid_row.set_index('Date').T
                                 st.dataframe(display_df.style.format("{:.2f}", na_rep="N/A"))
 
@@ -553,10 +553,10 @@ with tab_deep:
         with col2:
             if st.button("📈 Generate Peer Comparison", key="peer_comparison"):
                 st.info("💡 Peer comparison feature coming soon!")
-        
+
         st.markdown("---")
         st.markdown("### ⚠️ Risk Assessment Dashboard")
-        
+
         risk_col1, risk_col2, risk_col3 = st.columns(3)
         with risk_col1:
             market_risk = "High" if confidence < 0.6 else "Medium" if confidence < 0.8 else "Low"
@@ -574,18 +574,3 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
