@@ -306,39 +306,37 @@ def display_enhanced_sources(sources, prompt=""):
                         normalized_path = PurePath(doc_path).as_posix()
                         path_parts = normalized_path.split('/')
                         
-                        if 'sec-edgar-filings' in path_parts:
-                            try:
-                                ticker_from_path = path_parts[path_parts.index('sec-edgar-filings') + 1]
-                                filing_key = "/".join(path_parts[path_parts.index('sec-edgar-filings') + 2:])
-                                content = get_filing_content_from_hub(ticker_from_path, filing_key)
+                        try:
+                            sec_filings_index = path_parts.index('sec-edgar-filings')
+                            ticker_from_path = path_parts[sec_filings_index + 1]
+                            filing_key = "/".join(path_parts[sec_filings_index + 2:])
+                            content = get_filing_content_from_hub(ticker_from_path, filing_key)
 
-                                if content:
-                                    if active_view == 'summary':
-                                        soup = BeautifulSoup(content, 'html.parser')
-                                        clean_content = soup.get_text(strip=True)[:20000]
-                                        summary_prompt = f"Provide a concise, professional executive summary of the following document. Focus on financial performance, key business segments, risk factors, and future outlook. Use bullet points.\n\nDOCUMENT CONTENT:\n\n{clean_content}"
-                                        response = qual_brain.groq_client.chat.completions.create(model=GROQ_LLM_MODEL, messages=[{"role": "user", "content": summary_prompt}], temperature=0.2)
-                                        st.markdown(f'<div style="background-color: #1E293B; padding: 20px; border-radius: 8px;">{response.choices[0].message.content}</div>', unsafe_allow_html=True)
-                                    
-                                    elif active_view == 'paragraphs':
-                                        relevant_paragraphs = extract_relevant_paragraphs(content, query_keywords)
-                                        if relevant_paragraphs:
-                                            st.markdown("**🎯 Most Relevant Paragraphs:**")
-                                            for para in relevant_paragraphs:
-                                                st.info(para)
-                                        else:
-                                            st.info("💡 No highly relevant paragraphs found based on your query.")
-                                    
-                                    elif active_view == 'content':
-                                        soup = BeautifulSoup(content, 'html.parser')
-                                        clean_content = soup.get_text(separator='\n', strip=True)
-                                        st.code(clean_content, language=None)
-                                else:
-                                    st.warning("Could not retrieve the full content for this document from the data hub.")
-                            except (ValueError, IndexError):
-                                st.error("Could not parse the document path correctly.")
-                        else:
-                            st.error("Could not parse the document path correctly.")
+                            if content:
+                                if active_view == 'summary':
+                                    soup = BeautifulSoup(content, 'html.parser')
+                                    clean_content = soup.get_text(strip=True)[:20000]
+                                    summary_prompt = f"Provide a concise, professional executive summary of the following document. Focus on financial performance, key business segments, risk factors, and future outlook. Use bullet points.\n\nDOCUMENT CONTENT:\n\n{clean_content}"
+                                    response = qual_brain.groq_client.chat.completions.create(model=GROQ_LLM_MODEL, messages=[{"role": "user", "content": summary_prompt}], temperature=0.2)
+                                    st.markdown(f'<div style="background-color: #1E293B; padding: 20px; border-radius: 8px;">{response.choices[0].message.content}</div>', unsafe_allow_html=True)
+                                
+                                elif active_view == 'paragraphs':
+                                    relevant_paragraphs = extract_relevant_paragraphs(content, query_keywords)
+                                    if relevant_paragraphs:
+                                        st.markdown("**🎯 Most Relevant Paragraphs:**")
+                                        for para in relevant_paragraphs:
+                                            st.info(para)
+                                    else:
+                                        st.info("💡 No highly relevant paragraphs found based on your query.")
+                                
+                                elif active_view == 'content':
+                                    soup = BeautifulSoup(content, 'html.parser')
+                                    clean_content = soup.get_text(separator='\n', strip=True)
+                                    st.code(clean_content, language=None)
+                            else:
+                                st.warning("Could not retrieve the full content for this document from the data hub.")
+                        except (ValueError, IndexError):
+                            st.error("Could not parse the document path correctly. Please check the file paths in your data source.")
 # --- Main Dashboard ---
 st.markdown(f'<h1 class="main-header">AI Corporate Intelligence: {selected_company}</h1>', unsafe_allow_html=True)
 
