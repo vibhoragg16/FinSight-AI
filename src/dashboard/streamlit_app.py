@@ -52,6 +52,7 @@ from src.data_collection.financials import fetch_financials_dataframe
 from src.utils.financial_ratios import calculate_all_ratios
 
 # --- Page Config ---
+# Additional CSS to ensure full-width layout
 def inject_fullscreen_css():
     """Inject CSS to ensure full-width display."""
     st.markdown("""
@@ -537,31 +538,6 @@ def display_sources_and_analysis(sources, prompt="", selected_company=""):
                     if st.button("💡 Key Insights", key=insights_key, use_container_width=True):
                         generate_key_insights(combined_content, filename, selected_company)
 
-# Additional CSS to ensure full-width layout
-def inject_fullscreen_css():
-    """Inject CSS to ensure full-width display."""
-    st.markdown("""
-    <style>
-    .main .block-container {
-        max-width: 100% !important;
-        padding-left: 1rem !important;
-        padding-right: 1rem !important;
-    }
-    
-    .stExpander > div:first-child {
-        width: 100% !important;
-    }
-    
-    .stButton > button {
-        width: 100% !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# Call this at the beginning of your app
-inject_fullscreen_css()
-Improve
-Explain
 
 def extract_document_info_from_path(doc_path):
     """Extract basic document information from file path."""
@@ -986,6 +962,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
