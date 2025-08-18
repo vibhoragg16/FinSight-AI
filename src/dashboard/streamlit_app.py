@@ -629,7 +629,7 @@ def generate_ai_summary(content, filename, company):
             )
             
             summary = response.choices[0].message.content
-            
+            summary = re.sub(r'\n{3,}', '\n\n', summary).strip()
             # Create a full-screen container
             with st.container():
                 st.markdown(f"""
@@ -980,6 +980,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
