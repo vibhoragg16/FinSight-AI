@@ -636,33 +636,7 @@ def generate_ai_summary(content, filename, company):
             
             # Create a full-screen container
             with st.container():
-                st.markdown(f"""
-                    <div style="
-                        width: 100%; 
-                        max-width: 100%; 
-                        background: linear-gradient(135deg, #232526 0%, #414345 100%); 
-                        padding: 30px; 
-                        border-radius: 15px; 
-                        color: white; 
-                        margin: 25px 0;
-                        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-                        ">
-                        <h2 style="
-                            margin: 0 0 25px 0; 
-                            color: #60a5fa;
-                            text-align: center;
-                            font-size: 28px;
-                            font-weight: 600;
-                            ">🤖 AI Executive Summary</h2>
-                        <div style="
-                            line-height: 1.8; 
-                            font-size: 17px;
-                            white-space: pre-wrap;
-                            max-width: 100%;
-                            ">{cleaned_summary}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
+                st.markdown(f'''<div style="padding: 20px; background: linear-gradient(135deg, #232526 0%, #414345 100%); border-radius: 10px; color: white; margin: 20px 0;"><h4 style="margin: 0 0 15px 0; text-align: center;">🎯 AI Analysis Results</h4><div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; line-height: 1.6;">{cleaned_ai_summary}</div></div>''', unsafe_allow_html=True)            
         except Exception as e:
             st.error(f"❌ Failed to generate AI summary: {str(e)}")
             st.info("💡 This might be due to API limits or network issues. Please try again in a moment.")
@@ -984,6 +958,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
