@@ -629,35 +629,39 @@ def generate_ai_summary(content, filename, company):
             )
             
             summary = response.choices[0].message.content
-            summary = re.sub(r'\n{3,}', '\n\n', summary).strip()
+
+            cleaned_summary = re.sub(r'\n{3,}', '\n\n', summary)
+
+            cleaned_summary = re.sub(r'(:\s*)\n\s*\n', r'\1\n', cleaned_summary).strip()
+            
             # Create a full-screen container
             with st.container():
                 st.markdown(f"""
-                <div style="
-                    width: 100%; 
-                    max-width: 100%; 
-                    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); 
-                    padding: 30px; 
-                    border-radius: 15px; 
-                    color: white; 
-                    margin: 25px 0;
-                    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
-                    ">
-                    <h2 style="
-                        margin: 0 0 25px 0; 
-                        color: #60a5fa;
-                        text-align: center;
-                        font-size: 28px;
-                        font-weight: 600;
-                        ">🤖 AI Executive Summary</h2>
                     <div style="
-                        line-height: 1.8; 
-                        font-size: 17px;
-                        white-space: pre-wrap;
-                        max-width: 100%;
-                        ">{summary}</div>
-                </div>
-                """, unsafe_allow_html=True)
+                        width: 100%; 
+                        max-width: 100%; 
+                        background: linear-gradient(135deg, #232526 0%, #414345 100%); 
+                        padding: 30px; 
+                        border-radius: 15px; 
+                        color: white; 
+                        margin: 25px 0;
+                        box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+                        ">
+                        <h2 style="
+                            margin: 0 0 25px 0; 
+                            color: #60a5fa;
+                            text-align: center;
+                            font-size: 28px;
+                            font-weight: 600;
+                            ">🤖 AI Executive Summary</h2>
+                        <div style="
+                            line-height: 1.8; 
+                            font-size: 17px;
+                            white-space: pre-wrap;
+                            max-width: 100%;
+                            ">{cleaned_summary}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
             
         except Exception as e:
             st.error(f"❌ Failed to generate AI summary: {str(e)}")
@@ -980,6 +984,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
