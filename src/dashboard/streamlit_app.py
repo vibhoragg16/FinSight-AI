@@ -52,7 +52,39 @@ from src.data_collection.financials import fetch_financials_dataframe
 from src.utils.financial_ratios import calculate_all_ratios
 
 # --- Page Config ---
+def inject_fullscreen_css():
+    """Inject CSS to ensure full-width display."""
+    st.markdown("""
+    <style>
+    .main .block-container {
+        max-width: 100% !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+    
+    .stExpander > div:first-child {
+        width: 100% !important;
+    }
+    
+    .stButton > button {
+        width: 100% !important;
+    }
+    
+    /* Ensure containers take full width */
+    .stContainer > div {
+        width: 100% !important;
+    }
+    
+    /* Make sure expandable sections are full width */
+    .streamlit-expanderContent {
+        width: 100% !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# 2. CALL the CSS function right after your st.set_page_config() line:
 st.set_page_config(page_title="FinSight AI", layout="wide", page_icon="💡")
+inject_fullscreen_css()  # ADD THIS LINE
 
 # --- Load CSS ---
 def load_css(file_name):
@@ -381,19 +413,35 @@ def generate_unique_key(base_key, additional_info=""):
 
 def display_sources_and_analysis(sources, prompt="", selected_company=""):
     """
-    Consolidated function to display sources and SEC analysis in a clean, single section.
+    Display sources and SEC analysis in full-screen layout.
     """
     if not sources:
         st.info("No sources found for this query.")
         return
         
-    st.markdown("---")
+    # Full-width header
     st.markdown("""
-    <div style="padding: 20px; background: linear-gradient(90deg, #28a745 0%, #20c997 100%); border-radius: 12px; margin: 25px 0; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-        <h3 style="color: white; margin: 0; text-align: center; font-weight: 600;">📚 Sources & SEC Filing Analysis</h3>
-        <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; text-align: center;">
-            Direct access to SEC EDGAR filings with AI-powered insights
-        </p>
+    <div style="
+        width: 100%; 
+        padding: 25px; 
+        background: linear-gradient(90deg, #28a745 0%, #20c997 100%); 
+        border-radius: 12px; 
+        margin: 25px 0; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        ">
+        <h3 style="
+            color: white; 
+            margin: 0; 
+            text-align: center; 
+            font-weight: 600;
+            font-size: 24px;
+            ">📚 Sources & SEC Filing Analysis</h3>
+        <p style="
+            color: rgba(255,255,255,0.9); 
+            margin: 10px 0 0 0; 
+            text-align: center;
+            font-size: 16px;
+            ">Direct access to SEC EDGAR filings with AI-powered insights</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -405,78 +453,115 @@ def display_sources_and_analysis(sources, prompt="", selected_company=""):
             doc_sources[doc_key] = []
         doc_sources[doc_key].append(s)
 
-    # Display each document with its sources
+    # Display each document with its sources in full width
     for doc_index, (doc_path, doc_refs) in enumerate(doc_sources.items()):
         if doc_path == "Unknown Document":
             continue
             
         filename = os.path.basename(doc_path) if doc_path else f"SEC Filing {doc_index + 1}"
         
-        # Extract document info if available
-        doc_info = extract_document_info_from_path(doc_path)
-        
-        with st.expander(f"📄 {filename}", expanded=True):
-            
-            # Document metadata if available
-            if doc_info:
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    if doc_info.get('filing_type'):
-                        st.metric("Filing Type", doc_info['filing_type'])
-                with col2:
-                    if doc_info.get('date'):
-                        st.metric("Date", doc_info['date'])
-                with col3:
-                    if doc_info.get('company'):
-                        st.metric("Company", doc_info['company'])
-
-            # Generate SEC EDGAR link if possible
-            sec_link = generate_sec_edgar_link(doc_path, selected_company)
-            if sec_link:
-                st.markdown(f"""
-                <div style="padding: 15px; background: linear-gradient(90deg, #2196f3 0%, #21cbf3 100%); 
-                           border-radius: 8px; margin: 15px 0;">
-                    <h4 style="margin: 0; color: white;">🔗 Official SEC Filing</h4>
-                    <a href="{sec_link}" target="_blank" 
-                       style="color: white; text-decoration: none; font-weight: bold; font-size: 16px;">
-                        📊 View on SEC.gov →
-                    </a>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # Display relevant content snippets
-            st.markdown("#### 📝 Relevant Content")
-            combined_content = ""
-            for i, ref in enumerate(doc_refs, 1):
-                snippet = ref.page_content[:1000] + "..." if len(ref.page_content) > 1000 else ref.page_content
-                combined_content += ref.page_content + "\n\n"
+        # Use st.container() to ensure full width
+        with st.container():
+            with st.expander(f"📄 {filename}", expanded=True):
                 
-                st.markdown(f"""
-                <div style="border-left: 4px solid #007bff; padding: 15px; margin: 15px 0; 
-                           background: rgba(0, 123, 255, 0.08); border-radius: 8px;">
-                    <h5 style="color: #007bff; margin: 0 0 10px 0;">📍 Extract {i}</h5>
-                    <p style="margin: 0; line-height: 1.6; color: #e0e0e0;">{snippet}</p>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # Single analysis section with working summary
-            st.markdown("---")
-            st.markdown("#### 🤖 AI Analysis Tools")
-            
-            col1, col2 = st.columns(2)
-            
-            # Generate unique keys to avoid conflicts
-            doc_hash = hashlib.md5(f"{doc_path}_{doc_index}".encode()).hexdigest()[:8]
-            
-            with col1:
-                summary_key = f"summary_{doc_hash}"
-                if st.button("🤖 Generate AI Summary", key=summary_key):
-                    generate_ai_summary(combined_content, filename, selected_company)
-            
-            with col2:
-                insights_key = f"insights_{doc_hash}"
-                if st.button("💡 Key Insights", key=insights_key):
-                    generate_key_insights(combined_content, filename, selected_company)
+                # Document metadata if available
+                doc_info = extract_document_info_from_path(doc_path)
+                if doc_info:
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        if doc_info.get('filing_type'):
+                            st.metric("Filing Type", doc_info['filing_type'])
+                    with col2:
+                        if doc_info.get('date'):
+                            st.metric("Date", doc_info['date'])
+                    with col3:
+                        if doc_info.get('company'):
+                            st.metric("Company", doc_info['company'])
+
+                # Generate SEC EDGAR link if possible
+                sec_link = generate_sec_edgar_link(doc_path, selected_company)
+                if sec_link:
+                    st.markdown(f"""
+                    <div style="
+                        width: 100%;
+                        padding: 15px; 
+                        background: linear-gradient(90deg, #2196f3 0%, #21cbf3 100%); 
+                        border-radius: 8px; 
+                        margin: 15px 0;
+                        ">
+                        <h4 style="margin: 0; color: white;">🔗 Official SEC Filing</h4>
+                        <a href="{sec_link}" target="_blank" 
+                           style="color: white; text-decoration: none; font-weight: bold; font-size: 16px;">
+                            📊 View on SEC.gov →
+                        </a>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Display relevant content snippets
+                st.markdown("#### 📝 Relevant Content")
+                combined_content = ""
+                for i, ref in enumerate(doc_refs, 1):
+                    snippet = ref.page_content[:1000] + "..." if len(ref.page_content) > 1000 else ref.page_content
+                    combined_content += ref.page_content + "\n\n"
+                    
+                    st.markdown(f"""
+                    <div style="
+                        width: 100%;
+                        border-left: 4px solid #007bff; 
+                        padding: 15px; 
+                        margin: 15px 0; 
+                        background: rgba(0, 123, 255, 0.08); 
+                        border-radius: 8px;
+                        ">
+                        <h5 style="color: #007bff; margin: 0 0 10px 0;">📍 Extract {i}</h5>
+                        <p style="margin: 0; line-height: 1.6; color: #e0e0e0;">{snippet}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Analysis section with full-width buttons
+                st.markdown("---")
+                st.markdown("#### 🤖 AI Analysis Tools")
+                
+                # Use full width for buttons instead of columns
+                doc_hash = hashlib.md5(f"{doc_path}_{doc_index}".encode()).hexdigest()[:8]
+                
+                # Full-width button layout
+                col1, col2 = st.columns(2)
+                with col1:
+                    summary_key = f"summary_{doc_hash}"
+                    if st.button("🤖 Generate AI Summary", key=summary_key, use_container_width=True):
+                        generate_ai_summary(combined_content, filename, selected_company)
+                
+                with col2:
+                    insights_key = f"insights_{doc_hash}"
+                    if st.button("💡 Key Insights", key=insights_key, use_container_width=True):
+                        generate_key_insights(combined_content, filename, selected_company)
+
+# Additional CSS to ensure full-width layout
+def inject_fullscreen_css():
+    """Inject CSS to ensure full-width display."""
+    st.markdown("""
+    <style>
+    .main .block-container {
+        max-width: 100% !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+    
+    .stExpander > div:first-child {
+        width: 100% !important;
+    }
+    
+    .stButton > button {
+        width: 100% !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# Call this at the beginning of your app
+inject_fullscreen_css()
+Improve
+Explain
 
 def extract_document_info_from_path(doc_path):
     """Extract basic document information from file path."""
@@ -513,14 +598,13 @@ def generate_sec_edgar_link(doc_path, company_ticker):
         return None
 
 def generate_ai_summary(content, filename, company):
-    """Generate AI summary with proper error handling."""
+    """Generate AI summary with full-screen display."""
     if len(content.strip()) < 100:
         st.warning("Not enough content to generate a meaningful summary.")
         return
     
     with st.spinner("🤖 Generating AI summary..."):
         try:
-            # Initialize the brain if not already done
             qual_brain, _ = init_brains()
             
             # Truncate content to manageable size for API
@@ -552,21 +636,41 @@ def generate_ai_summary(content, filename, company):
             
             summary = response.choices[0].message.content
             
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); 
-                       padding: 25px; border-radius: 12px; color: white; margin: 20px 0;
-                       border: 1px solid #3498db;">
-                <h4 style="margin: 0 0 15px 0; color: #60a5fa;">🤖 AI Executive Summary</h4>
-                <div style="line-height: 1.7; font-size: 16px;">{summary}</div>
-            </div>
-            """, unsafe_allow_html=True)
+            # Create a full-screen container
+            with st.container():
+                st.markdown(f"""
+                <div style="
+                    width: 100%; 
+                    max-width: 100%; 
+                    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); 
+                    padding: 30px; 
+                    border-radius: 15px; 
+                    color: white; 
+                    margin: 25px 0;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+                    ">
+                    <h2 style="
+                        margin: 0 0 25px 0; 
+                        color: #60a5fa;
+                        text-align: center;
+                        font-size: 28px;
+                        font-weight: 600;
+                        ">🤖 AI Executive Summary</h2>
+                    <div style="
+                        line-height: 1.8; 
+                        font-size: 17px;
+                        white-space: pre-wrap;
+                        max-width: 100%;
+                        ">{summary}</div>
+                </div>
+                """, unsafe_allow_html=True)
             
         except Exception as e:
             st.error(f"❌ Failed to generate AI summary: {str(e)}")
             st.info("💡 This might be due to API limits or network issues. Please try again in a moment.")
 
 def generate_key_insights(content, filename, company):
-    """Generate key insights from the content."""
+    """Generate key insights from the content in full screen."""
     if len(content.strip()) < 100:
         st.warning("Not enough content to generate meaningful insights.")
         return
@@ -585,7 +689,7 @@ def generate_key_insights(content, filename, company):
             
             Provide:
             • Top 3 financial highlights
-            • Key business developments
+            • Key business developments  
             • Important risk factors
             • Strategic priorities
             
@@ -604,14 +708,35 @@ def generate_key_insights(content, filename, company):
             
             insights = response.choices[0].message.content
             
-            st.markdown(f"""
-            <div style="background: linear-gradient(135deg, #134e5e 0%, #71b280 100%); 
-                       padding: 25px; border-radius: 12px; color: white; margin: 20px 0;">
-                <h4 style="margin: 0 0 15px 0; color: #a8e6cf;">💡 Key Insights</h4>
-                <div style="line-height: 1.7; font-size: 16px;">{insights}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            
+            # Create a full-screen container using st.container()
+            with st.container():
+                st.markdown(f"""
+                <div style="
+                    width: 100%; 
+                    max-width: 100%; 
+                    background: linear-gradient(135deg, #134e5e 0%, #71b280 100%); 
+                    padding: 30px; 
+                    border-radius: 15px; 
+                    color: white; 
+                    margin: 25px 0;
+                    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+                    ">
+                    <h2 style="
+                        margin: 0 0 25px 0; 
+                        color: #a8e6cf; 
+                        text-align: center;
+                        font-size: 28px;
+                        font-weight: 600;
+                        ">💡 Key Insights</h2>
+                    <div style="
+                        line-height: 1.8; 
+                        font-size: 17px;
+                        white-space: pre-wrap;
+                        max-width: 100%;
+                        ">{insights}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
         except Exception as e:
             st.error(f"❌ Failed to generate insights: {str(e)}")
 
@@ -717,22 +842,24 @@ with tab_chat:
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("🔍 Analyzing financial data and SEC filings..."):
-                try:
-                    response, sources = query_rag_system(selected_company, prompt)
-                    st.markdown(response)
-                    
-                    if sources:
-                        display_sources_and_analysis(sources, prompt, selected_company)
-                    
-                    st.session_state[session_key].append({
-                        "role": "assistant", "content": response, 
-                        "sources": sources, "prompt": prompt
-                    })
-                except Exception as e:
-                    error_response = f"Sorry, I couldn't complete the analysis: {e}"
-                    st.error(error_response)
-                    st.session_state[session_key].append({"role": "assistant", "content": error_response, "sources": []})
+    with st.spinner("🔍 Analyzing financial data and SEC filings..."):
+        try:
+            response, sources = query_rag_system(selected_company, prompt)
+            st.markdown(response)
+            
+            # Use container to ensure full width
+            if sources:
+                with st.container():
+                    display_sources_and_analysis(sources, prompt, selected_company)
+            
+            st.session_state[session_key].append({
+                "role": "assistant", "content": response, 
+                "sources": sources, "prompt": prompt
+            })
+        except Exception as e:
+            error_response = f"Sorry, I couldn't complete the analysis: {e}"
+            st.error(error_response)
+            st.session_state[session_key].append({"role": "assistant", "content": error_response, "sources": []})
 
 with tab_news:
     st.header("📰 Recent Company News")
@@ -859,6 +986,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
