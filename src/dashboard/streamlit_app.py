@@ -608,12 +608,14 @@ def generate_ai_summary(content, filename, company):
             Analyze this SEC filing content for {company} and provide a concise executive summary.
             
             Focus on:
-            - Key financial highlights and metrics
-            - Important business developments
-            - Risk factors mentioned
-            - Strategic outlook
-            
-            Keep the summary under 300 words and use clear, professional language.
+                - Key financial highlights and performance metrics
+                - Major business developments and strategic initiatives  
+                - Risk factors and challenges mentioned
+                - Management outlook and forward guidance
+                - Any significant changes from previous periods
+                
+                Keep the summary under 400 words and use bullet points for clarity.
+
             
             CONTENT:
             {content}
@@ -978,6 +980,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
