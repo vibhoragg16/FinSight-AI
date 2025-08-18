@@ -52,40 +52,255 @@ from src.data_collection.financials import fetch_financials_dataframe
 from src.utils.financial_ratios import calculate_all_ratios
 
 # --- Page Config ---
-# Additional CSS to ensure full-width layout
+st.set_page_config(
+    page_title="FinSight AI",
+    layout="wide",
+    page_icon="💡",
+    initial_sidebar_state="expanded"
+)
+
+# Enhanced Full-Screen CSS
 def inject_fullscreen_css():
-    """Inject CSS to ensure full-width display."""
+    """Inject comprehensive CSS for true full-screen display."""
     st.markdown("""
     <style>
+    /* Remove default Streamlit padding and margins */
     .main .block-container {
         max-width: 100% !important;
+        width: 100% !important;
         padding-left: 1rem !important;
         padding-right: 1rem !important;
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+    }
+    
+    /* Remove padding from the main content area */
+    .main > div {
+        padding-top: 0rem !important;
+        padding-bottom: 0rem !important;
+    }
+    
+    /* Full width for all containers */
+    .stContainer,
+    .stContainer > div,
+    .element-container,
+    .stMarkdown,
+    .stDataFrame,
+    .stPlotlyChart {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    /* Full width buttons */
+    .stButton > button {
+        width: 100% !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1rem !important;
+        font-weight: 500 !important;
+        border: none !important;
+        background: linear-gradient(90deg, #007bff, #0056b3) !important;
+        color: white !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .stButton > button:hover {
+        background: linear-gradient(90deg, #0056b3, #004085) !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3) !important;
+    }
+    
+    /* Full width expandable sections */
+    .stExpander {
+        width: 100% !important;
+        border: 1px solid #333 !important;
+        border-radius: 10px !important;
+        margin: 1rem 0 !important;
+        background: rgba(38, 39, 48, 0.8) !important;
+        backdrop-filter: blur(10px) !important;
     }
     
     .stExpander > div:first-child {
         width: 100% !important;
+        padding: 1rem !important;
+        background: linear-gradient(90deg, #2d3748, #4a5568) !important;
+        border-radius: 10px 10px 0 0 !important;
+        font-weight: 600 !important;
+        font-size: 1.1rem !important;
     }
     
-    .stButton > button {
-        width: 100% !important;
-    }
-    
-    /* Ensure containers take full width */
-    .stContainer > div {
-        width: 100% !important;
-    }
-    
-    /* Make sure expandable sections are full width */
     .streamlit-expanderContent {
         width: 100% !important;
+        padding: 1.5rem !important;
+        background: rgba(26, 32, 44, 0.95) !important;
+    }
+    
+    /* Enhanced tabs styling */
+    .stTabs {
+        width: 100% !important;
+    }
+    
+    .stTabs [data-baseweb="tab-list"] {
+        width: 100% !important;
+        display: flex !important;
+        justify-content: space-around !important;
+        background: linear-gradient(90deg, #1a202c, #2d3748) !important;
+        border-radius: 10px !important;
+        padding: 0.5rem !important;
+        margin: 1rem 0 !important;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        flex: 1 !important;
+        text-align: center !important;
+        padding: 1rem !important;
+        border-radius: 8px !important;
+        margin: 0 0.25rem !important;
+        transition: all 0.3s ease !important;
+        font-weight: 500 !important;
+    }
+    
+    .stTabs [data-baseweb="tab"]:hover {
+        background: rgba(66, 153, 225, 0.2) !important;
+        transform: translateY(-2px) !important;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(90deg, #4299e1, #3182ce) !important;
+        color: white !important;
+    }
+    
+    /* Chat messages full width */
+    .stChatMessage {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 1rem 0 !important;
+    }
+    
+    /* Metrics cards full width */
+    .stMetric {
+        width: 100% !important;
+        padding: 1rem !important;
+        background: rgba(38, 39, 48, 0.8) !important;
+        border-radius: 10px !important;
+        border: 1px solid #333 !important;
+        text-align: center !important;
+    }
+    
+    /* Charts full width */
+    .stPlotlyChart {
+        width: 100% !important;
+        height: 400px !important;
+    }
+    
+    /* Remove any width constraints on columns */
+    .stColumns {
+        width: 100% !important;
+        gap: 1rem !important;
+    }
+    
+    .stColumn {
+        flex: 1 !important;
+        padding: 0.5rem !important;
+    }
+    
+    /* Chat input full width */
+    .stChatInput {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    /* Data frames full width */
+    .stDataFrame > div {
+        width: 100% !important;
+        overflow-x: auto !important;
+    }
+    
+    /* Sidebar enhancements */
+    .css-1d391kg {
+        padding: 1rem !important;
+    }
+    
+    /* Remove any max-width constraints */
+    * {
+        max-width: none !important;
+    }
+    
+    /* Custom component styling */
+    .metric-card {
+        width: 100% !important;
+        padding: 1.5rem !important;
+        background: linear-gradient(135deg, #2d3748 0%, #4a5568 100%) !important;
+        border-radius: 12px !important;
+        border: 1px solid #4a5568 !important;
+        margin: 0.5rem 0 !important;
+        text-align: center !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+        transition: all 0.3s ease !important;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-4px) !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+    }
+    
+    .metric-card h4 {
+        color: #a0aec0 !important;
+        margin: 0 0 1rem 0 !important;
+        font-size: 1rem !important;
+        font-weight: 500 !important;
+    }
+    
+    .health-score-good { color: #48bb78 !important; font-size: 2rem !important; font-weight: bold !important; }
+    .health-score-warning { color: #ed8936 !important; font-size: 2rem !important; font-weight: bold !important; }
+    .health-score-danger { color: #f56565 !important; font-size: 2rem !important; font-weight: bold !important; }
+    
+    .forecast-text { color: #4299e1 !important; font-size: 1.5rem !important; font-weight: bold !important; }
+    .sentiment-text { color: #ed8936 !important; font-size: 1.5rem !important; font-weight: bold !important; }
+    .price-text { color: #48bb78 !important; font-size: 1.5rem !important; font-weight: bold !important; }
+    
+    /* Main header styling */
+    .main-header {
+        text-align: center !important;
+        color: #4299e1 !important;
+        margin: 2rem 0 !important;
+        padding: 2rem !important;
+        background: linear-gradient(135deg, #1a365d, #2c5282) !important;
+        border-radius: 15px !important;
+        border: 2px solid #4299e1 !important;
+        box-shadow: 0 8px 32px rgba(66, 153, 225, 0.3) !important;
+    }
+    
+    /* Enhanced gradients and animations */
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(66, 153, 225, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(66, 153, 225, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(66, 153, 225, 0); }
+    }
+    
+    .pulse-animation {
+        animation: pulse 2s infinite !important;
+    }
+    
+    /* Responsive design */
+    @media (max-width: 768px) {
+        .main .block-container {
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+        }
+        
+        .stColumns {
+            flex-direction: column !important;
+        }
+        
+        .stColumn {
+            width: 100% !important;
+        }
     }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. CALL the CSS function right after your st.set_page_config() line:
-st.set_page_config(page_title="FinSight AI", layout="wide", page_icon="💡")
-inject_fullscreen_css()  # ADD THIS LINE
+# Call the enhanced CSS function
+inject_fullscreen_css()
 
 # --- Load CSS ---
 def load_css(file_name):
@@ -962,6 +1177,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
