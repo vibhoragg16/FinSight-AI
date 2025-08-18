@@ -636,7 +636,7 @@ def generate_ai_summary(content, filename, company):
             
             # Create a full-screen container
             with st.container():
-                st.markdown(f'''<div style="padding: 20px; background: linear-gradient(135deg, #232526 0%, #414345 100%); border-radius: 10px; color: white; margin: 20px 0;"><h4 style="margin: 0 0 15px 0; text-align: center;">🎯 AI Analysis Results</h4><div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; line-height: 1.6;">{cleaned_ai_summary}</div></div>''', unsafe_allow_html=True)            
+                st.markdown(f'''<div style="padding: 20px; background: linear-gradient(135deg, #232526 0%, #414345 100%); border-radius: 10px; color: white; margin: 20px 0;"><h4 style="margin: 0 0 15px 0; text-align: center;">🎯 AI Analysis Results</h4><div style="background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; line-height: 1.6;">{cleaned_summary}</div></div>''', unsafe_allow_html=True)            
         except Exception as e:
             st.error(f"❌ Failed to generate AI summary: {str(e)}")
             st.info("💡 This might be due to API limits or network issues. Please try again in a moment.")
@@ -958,6 +958,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
