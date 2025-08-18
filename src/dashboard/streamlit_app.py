@@ -527,21 +527,33 @@ def display_sources_and_analysis(sources, prompt="", selected_company=""):
                 st.markdown("---")
                 st.markdown("#### 🤖 AI Analysis Tools")
                 
-                # Use full width for buttons instead of columns
+                # Create a unique hash for each document to manage state
                 doc_hash = hashlib.md5(f"{doc_path}_{doc_index}".encode()).hexdigest()[:8]
-                
-                # Full-width button layout
+                summary_btn_key = f"summary_btn_{doc_hash}"
+                insights_btn_key = f"insights_btn_{doc_hash}"
+                summary_state_key = f"show_summary_{doc_hash}"
+                insights_state_key = f"show_insights_{doc_hash}"
+
                 col1, col2 = st.columns(2)
                 with col1:
-                    summary_key = f"summary_{doc_hash}"
-                    if st.button("🤖 Generate AI Summary", key=summary_key, use_container_width=True):
-                        generate_ai_summary(combined_content, filename, selected_company)
-                
-                with col2:
-                    insights_key = f"insights_{doc_hash}"
-                    if st.button("💡 Key Insights", key=insights_key, use_container_width=True):
-                        generate_key_insights(combined_content, filename, selected_company)
+                    if st.button("🤖 Generate AI Summary", key=summary_btn_key, use_container_width=True):
+                        # Toggle state: show summary, hide insights
+                        st.session_state[summary_state_key] = True
+                        st.session_state[insights_state_key] = False
 
+                with col2:
+                    if st.button("💡 Key Insights", key=insights_btn_key, use_container_width=True):
+                        # Toggle state: show insights, hide summary
+                        st.session_state[insights_state_key] = True
+                        st.session_state[summary_state_key] = False
+
+                # Render the analysis cards OUTSIDE the columns based on session state
+                if st.session_state.get(summary_state_key, False):
+                    generate_ai_summary(combined_content, filename, selected_company)
+
+                if st.session_state.get(insights_state_key, False):
+                    generate_key_insights(combined_content, filename, selected_company)
+                    
 
 def extract_document_info_from_path(doc_path):
     """Extract basic document information from file path."""
@@ -966,6 +978,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
