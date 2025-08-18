@@ -842,24 +842,24 @@ with tab_chat:
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-    with st.spinner("🔍 Analyzing financial data and SEC filings..."):
-        try:
-            response, sources = query_rag_system(selected_company, prompt)
-            st.markdown(response)
-            
-            # Use container to ensure full width
-            if sources:
-                with st.container():
-                    display_sources_and_analysis(sources, prompt, selected_company)
-            
-            st.session_state[session_key].append({
-                "role": "assistant", "content": response, 
-                "sources": sources, "prompt": prompt
-            })
-        except Exception as e:
-            error_response = f"Sorry, I couldn't complete the analysis: {e}"
-            st.error(error_response)
-            st.session_state[session_key].append({"role": "assistant", "content": error_response, "sources": []})
+            with st.spinner("🔍 Analyzing financial data and SEC filings..."):
+                try:
+                    response, sources = query_rag_system(selected_company, prompt)
+                    st.markdown(response)
+                    
+                    # Use container to ensure full width
+                    if sources:
+                        with st.container():
+                            display_sources_and_analysis(sources, prompt, selected_company)
+                    
+                    st.session_state[session_key].append({
+                        "role": "assistant", "content": response, 
+                        "sources": sources, "prompt": prompt
+                    })
+                except Exception as e:
+                    error_response = f"Sorry, I couldn't complete the analysis: {e}"
+                    st.error(error_response)
+                    st.session_state[session_key].append({"role": "assistant", "content": error_response, "sources": []})
 
 with tab_news:
     st.header("📰 Recent Company News")
@@ -986,6 +986,7 @@ with tab_deep:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
 # --- Footer ---
+
 
 
 
