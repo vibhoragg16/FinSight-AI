@@ -15,7 +15,7 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
 # --- LLM & RAG ---
 # Using a Llama3 model available on Groq
-GROQ_LLM_MODEL = "llama3-8b-8192" 
+GROQ_LLM_MODEL = "llama-3.1-8b-instant"
 # Using a local, open-source model for embeddings
 EMBEDDING_MODEL_NAME = 'all-MiniLM-L6-v2'
 VECTOR_STORE_PATH = "./data/vector_store"
@@ -46,6 +46,7 @@ SCHEDULER_NEWS_DATA_HOURS = 6
 SCHEDULER_AI_ANALYSIS_HOURS = 8
 
 SCHEDULER_SEC_FILINGS_DAYS = 1
+
 
 
 
