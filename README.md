@@ -1,14 +1,129 @@
-# FinSight AI: AI-Powered Corporate Intelligence Platform
+# FinSight-AI: AI-Powered Corporate Intelligence Platform
 
-**FinSight AI** is a sophisticated, end-to-end platform designed to automate the complex workflow of a financial analyst. It autonomously gathers vast amounts of corporate data—including SEC filings, global news, and market data—processes it, and applies a suite of AI models to deliver actionable insights. The results are presented through a polished, interactive dashboard and a proactive email alerting system.
+[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://github.com/vibhoragg16/finsight-ai)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/vibhoragg16/finsight-ai)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python Version](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+
+**FinSight-AI** is a sophisticated, end-to-end platform designed to automate the complex workflow of a financial analyst. It autonomously gathers vast amounts of corporate data—including SEC filings, global news, and market data—processes it, and applies a suite of AI models to deliver actionable insights. The results are presented through a polished, interactive dashboard and a proactive email alerting system.
 
 This platform is built on a modular, cloud-integrated architecture, ensuring scalability, maintainability, and easy extension of its capabilities.
 
 ---
 
-## 🏛️ System Architecture & Technology Stack
+## Table of Contents
 
-FinSight AI is designed with a clear separation between data, AI models, and the user interface. Data assets are stored and versioned on Hugging Face Hub, while the application logic is managed in a Python-based backend and served via Streamlit.
+- [About The Project](#about-the-project)
+- [Project In-Depth](#project-in-depth)
+  - [Data & Processing Pipeline](#data--processing-pipeline)
+  - [Machine Learning Models](#machine-learning-models)
+  - [RAG Pipeline for AI Analyst Chat](#rag-pipeline-for-ai-analyst-chat)
+- [Features](#features)
+- [Technology Stack](#technology-stack)
+- [System Architecture](#system-architecture)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Configuration](#configuration)
+- [Usage](#usage)
+- [Changelog](#changelog)
+- [Contributing](#contributing)
+- [License](#license)
+- [Contact](#contact)
+- [Acknowledgments](#acknowledgments)
+
+---
+
+## About The Project
+
+FinSight-AI is engineered to tackle the overwhelming challenge of information overload in the financial industry. Analysts and investors are often buried under a deluge of SEC filings, news articles, and market data, making it difficult to extract timely, actionable insights. This platform automates the entire intelligence-gathering and analysis pipeline, from data acquisition to insight delivery.
+
+**Key benefits include:**
+
+-   **Automated Data Pipelines:** Drastically reduces manual effort by automatically fetching and processing data from multiple sources.
+-   **AI-Powered Insights:** Leverages machine learning and large language models (LLMs) to uncover trends, risks, and opportunities that might otherwise be missed.
+-   **Interactive & Intuitive UI:** Presents complex financial information in a clear, digestible format through a Streamlit-powered dashboard.
+-   **Proactive Alerting:** Keeps users informed of critical events and market changes through a sophisticated, rule-based email alert system.
+
+This project is for financial analysts, retail investors, and anyone looking to gain a competitive edge through data-driven decision-making.
+
+---
+
+## Project In-Depth
+
+### Data & Processing Pipeline
+
+The platform's intelligence is built upon a robust data pipeline that gathers, processes, and prepares data for AI analysis.
+
+1.  **Data Collection:** The pipeline begins by collecting three core types of data using the `main.py collect` command:
+    * **SEC Filings:** Downloads 10-K (annual) and 10-Q (quarterly) reports from the SEC EDGAR database using the `sec-edgar-downloader` library.
+    * **Market Data:** Fetches historical stock prices, trading volumes, and calculates a suite of technical indicators (RSI, MACD, etc.) using `yfinance` and the `ta` library.
+    * **News Data:** Gathers the latest global news articles for each target company via the `NewsAPI`.
+
+2.  **Document Processing:** Once collected, the raw, unstructured data (especially SEC filings) is processed with the `main.py process` command:
+    * **Text Extraction:** The `parser.py` script uses `PyMuPDFLoader` and `UnstructuredHTMLLoader` to extract clean text from PDF and HTML documents.
+    * **Table Extraction:** It identifies and extracts financial tables from PDF filings using `camelot-py`, saving them as structured CSV files for quantitative analysis.
+    * **Chunking & Vectorization:** The extracted text is split into smaller, semantically coherent chunks. Each chunk is then converted into a numerical vector (embedding) using a `SentenceTransformer` model (`all-MiniLM-L6-v2`) and stored in a `ChromaDB` vector store, which powers the RAG system.
+
+### Machine Learning Models
+
+FinSight-AI employs two specialized machine learning models to generate its core quantitative insights. These are trained using the `main.py train` command.
+
+1.  **🧠 PCA Health Scorer (`pca_health_scorer.py`):**
+    * **Purpose:** To distill a wide array of complex financial ratios into a single, intuitive "Fundamental Health Score" from 0-100.
+    * **Technique:** This model uses **Principal Component Analysis (PCA)**, an unsupervised learning technique, to identify the primary drivers of financial health from ratios like Debt-to-Equity, Return on Assets, and more. It provides a holistic view of a company's financial stability.
+    * **Output:** A single score representing the company's overall financial health relative to the dataset it was trained on.
+
+2.  **🎯 XGBoost Stock Predictor (`xgboost_predictor.py`):**
+    * **Purpose:** To forecast short-term stock price movement (Bullish or Bearish) and provide a confidence level for its prediction.
+    * **Technique:** It uses an **XGBoost (Extreme Gradient Boosting)** classifier, a powerful supervised learning algorithm.
+    * **Features:** The model is trained on a rich feature set prepared by `build_features.py`, which includes:
+        * **Technical Indicators:** SMA, RSI, MACD, Bollinger Bands, etc.
+        * **Fundamental Ratios:** Current Ratio, Debt-to-Equity, etc.
+        * **Sentiment Score:** The latest news sentiment is included as a feature.
+    * **Output:** A prediction ("Bullish" or "Bearish") and a confidence score (e.g., 85%).
+
+### RAG Pipeline for AI Analyst Chat
+
+The "AI Analyst Chat" feature is powered by a state-of-the-art Retrieval-Augmented Generation (RAG) pipeline, ensuring that the LLM's answers are grounded in factual, company-specific data.
+
+1.  **Query Expansion (`query_processor.py`):** When a user submits a query (e.g., "What are the main risks for this company?"), it is first sent to the **Groq Llama 3 LLM** to generate several alternative phrasings. This enhances the search by capturing different semantic variations of the original question.
+
+2.  **Retrieval (`retrieval_engine.py`):** All query versions are converted into vector embeddings. The `RetrievalEngine` then searches the company-specific **ChromaDB vector store** to find the text chunks from SEC filings that are most semantically similar to the user's queries.
+
+3.  **Augmentation & Generation (`query_processor.py`):** The retrieved text chunks (the "context") are bundled together with the original user query into a new, detailed prompt. This augmented prompt is then sent to the **Groq Llama 3 LLM**. By providing this direct evidence, the LLM can generate a highly accurate and contextually relevant answer, often citing the source documents directly.
+
+---
+
+## Features
+
+-   **📊 Interactive Dashboard (`streamlit_app.py`):**
+    -   **Multi-Tab Interface:** Clean layout with dedicated sections for Market Analysis, AI Analyst Chat, News Analysis, and a Deep Dive summary.
+    -   **At-a-Glance Metrics:** Critical AI-generated insights, including a Fundamental Health Score, Stock Forecast with confidence levels, and real-time News Sentiment.
+
+-   **🤖 Advanced AI & Document Interaction (`src/rag/`):**
+    -   **Retrieval-Augmented Generation (RAG):** Chat with SEC filings to get accurate, source-based answers, powered by LangChain and Groq's Llama 3.
+    -   **On-Demand AI Summary:** Generate concise executive summaries of source documents with a single click.
+
+-   **⚙️ Automated Backend & Data Pipelines (`main.py`):**
+    -   **Full-Lifecycle CLI:** A central command-line interface to manage data collection, processing, model training, and dashboard launch.
+    -   **Automated Model Training:** A simple command (`python main.py train`) to retrain all models on the latest data.
+    -   **Multi-Source Data Collection:** Gathers data from SEC EDGAR, NewsAPI, and yfinance.
+
+-   **⏰ Scheduling & Alerting (`src/scheduler/`, `src/alerting/`):**
+    -   **Task Scheduler:** Automates the entire data pipeline with configurable frequencies for different tasks.
+    -   **Proactive Alerting:** A rule-based system that monitors for critical events and sends immediate email alerts.
+
+-   **🧠 AI Core & Document Parsing (`src/ai_core/`, `src/document_processing/`):**
+    -   **Qualitative & Quantitative Brains:** Separates AI logic for text-based analysis (sentiment, summarization) and numerical analysis (health score, predictions).
+    -   **Advanced Document Parsing:** Extracts text and tables from PDF and HTML filings, chunks them, and creates a vector store using ChromaDB.
+
+---
+
+
+## System Architecture
+
+FinSight-AI is designed with a clear separation between data, AI models, and the user interface. Data assets are stored and versioned on Hugging Face Hub, while the application logic is managed in a Python-based backend and served via Streamlit.
 
 ### High-Level Data Flow
 
@@ -53,71 +168,21 @@ FinSight AI is designed with a clear separation between data, AI models, and the
 |______________________________________________________________________|
 ```
 
-### Technology Stack
+## Technology Stack
 
--   **Backend & CLI**: Python, Argparse
--   **Web Dashboard**: Streamlit
--   **Data Manipulation**: Pandas, NumPy
--   **AI & Machine Learning**:
-    -   **Prediction**: Scikit-learn (for PCA), XGBoost (for forecasting)
-    -   **LLM/RAG**: LangChain (for orchestrating the RAG pipeline), Groq (for fast Llama 3 inference)
-    -   **Embeddings**: Sentence-Transformers (for converting text to vectors)
-    -   **Vector Database**: ChromaDB (for storing and retrieving text vectors)
--   **Data Collection**: `yfinance` (market data), `newsapi-python` (news), `sec-edgar-downloader` (SEC filings)
--   **File Storage & Versioning**: Hugging Face Hub (for datasets and models), Git LFS
--   **Utilities**: `python-dotenv` (environment variables), `schedule` (for automated tasks)
-
----
-
-## ✨ Key Features in Depth
-
-### 📊 Interactive Dashboard (`streamlit_app.py`)
-
-The heart of the platform, providing a user-friendly interface to complex financial data.
-
--   **Multi-Tab Interface**: A clean, organized layout with four distinct sections:
-    1.  **Market Analysis**: For viewing historical price and volume data.
-    2.  **AI Analyst Chat**: The core RAG-powered feature for interacting with documents.
-    3.  **News Analysis**: A feed of the latest news related to the selected company.
-    4.  **Deep Dive**: A summary of all AI-generated insights and advanced analysis tools.
-
--   **At-a-Glance Metrics**: The main view presents the most critical AI-generated insights:
-    -   **🧠 Fundamental Health Score**: A proprietary score from 0-100, calculated by a Principal Component Analysis (PCA) model trained on key financial ratios. This score provides a quick assessment of the company's financial stability.
-    -   **🎯 Stock Forecast**: A bullish or bearish prediction on future price movement, complete with a confidence score. This is powered by an XGBoost model trained on a combination of technical indicators and financial ratios.
-    -   **📰 News Sentiment**: Real-time sentiment analysis of the latest news headlines, providing a gauge of market perception.
-
-### 🤖 Advanced AI & Document Interaction (`src/rag/`)
-
-The "AI Analyst Chat" tab allows you to have a conversation with the company's financial documents.
-
--   **Retrieval-Augmented Generation (RAG)**: Instead of just asking an LLM a question, the system first retrieves relevant text snippets from the company's SEC filings (stored in a ChromaDB vector database). These snippets are then provided to the LLM as context, allowing it to generate highly accurate, source-based answers.
--   **On-Demand AI Summary**: Users can click a button to generate a concise, professional executive summary of any source document. The app fetches the full document from Hugging Face Hub, sends it to the Groq LLM, and displays the summary.
--   **Full Content Viewer & Paragraph Extraction**: You can view the complete, cleaned text of any source document or have the AI extract only the paragraphs most relevant to your query, all fetched on-demand from the cloud.
-
-### ⚙️ Automated Backend & Data Pipelines (`main.py`)
-
-The platform is managed through a powerful Command-Line Interface (CLI).
-
--   **Full-Lifecycle CLI**: `main.py` acts as the central control panel for the entire platform, allowing you to run data collection, processing, model training, and launch the dashboard with simple commands.
--   **Automated Model Training**: The `python main.py train` command automatically gathers all processed data, retrains both the PCA Health Scorer and the XGBoost Stock Predictor, and saves the updated models for use by the dashboard.
--   **Multi-Source Data Collection**: The `python main.py collect` command triggers scripts to download and process data from multiple sources:
-    -   **SEC Filings**: Fetches 10-K and 10-Q documents directly from the SEC's EDGAR database.
-    -   **Global News**: Collects real-time news from various sources via NewsAPI.
-    -   **Market Data**: Gathers historical stock prices, volumes, and technical indicators using `yfinance` and the `ta` library.
+-   **Backend & CLI:** Python, Argparse
+-   **Web Dashboard:** Streamlit
+-   **Data Manipulation:** Pandas, NumPy
+-   **AI & Machine Learning:**
+    -   **Prediction:** Scikit-learn (PCA), XGBoost (forecasting)
+    -   **LLM/RAG:** LangChain, Groq (Llama 3 inference)
+    -   **Embeddings:** Sentence-Transformers
+    -   **Vector Database:** ChromaDB
+-   **Data Collection:** `yfinance`, `newsapi-python`, `sec-edgar-downloader`
+-   **File Storage & Versioning:** Hugging Face Hub, Git LFS
+-   **Utilities:** `python-dotenv`, `schedule`
 
 ---
-
-### ⏰ Scheduling & Alerting (`src/scheduler/, src/alerting/`)
--  **Task Scheduler**: A background service (`python main.py scheduler`) that automates the entire data pipeline. It can be configured to run data collection, processing, and analysis at different frequencies (e.g., market data every 4 hours, SEC filings daily).
-
--  **Proactive Alerting**: A rule-based system that monitors for critical events like significant drops in the health score, high price volatility, or a cluster of negative news. It sends immediate email alerts for high-severity events and daily summaries for others.
-
-### 🧠 AI Core & Document Parsing (`src/ai_core/, src/document_processing/`)
--  **Qualitative & Quantitative Brains**: The AI logic is separated into two main components: the `QuantitativeBrain` handles all numerical analysis (health score, predictions), while the `QualitativeBrain` manages text-based tasks like sentiment analysis and summarization.
-
--  **Document Parsing**: The `parser.py` script is the core of the document processing pipeline. It extracts raw text from HTML and PDF filings, chunks it into manageable pieces, generates embeddings (numerical representations), and stores them in the ChromaDB vector store.
-
--  **Table Extraction**: The system uses the `camelot-py` library to identify and extract tables from PDF documents, which can be used for more granular quantitative analysis.
 
 ## 📂 Project Structure Explained
 
