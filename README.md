@@ -9,6 +9,8 @@
 
 This platform is built on a modular, cloud-integrated architecture, ensuring scalability, maintainability, and easy extension of its capabilities.
 
+Project Link:[FinSight-AI](https://finsight-ai-7.streamlit.app/)
+
 ---
 
 ## Table of Contents
@@ -19,19 +21,12 @@ This platform is built on a modular, cloud-integrated architecture, ensuring sca
   - [Machine Learning Models](#machine-learning-models)
   - [RAG Pipeline for AI Analyst Chat](#rag-pipeline-for-ai-analyst-chat)
 - [Features](#features)
-- [Technology Stack](#technology-stack)
 - [System Architecture](#system-architecture)
+- - [Technology Stack](#technology-stack)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
   - [Installation](#installation)
   - [Configuration](#configuration)
-- [Usage](#usage)
-- [Changelog](#changelog)
-- [Contributing](#contributing)
-- [License](#license)
-- [Contact](#contact)
-- [Acknowledgments](#acknowledgments)
-
 ---
 
 ## About The Project
@@ -232,7 +227,7 @@ The project is organized into a modular structure to ensure maintainability and 
 
 ---
 
-## 🚀 Getting Started: Setup & Usage
+## 🚀 Getting Started : Setup & Usage
 
 ### 1. Prerequisites
 -   Python 3.9+
