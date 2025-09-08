@@ -50,6 +50,8 @@ from src.ai_core.qualitative_brain import QualitativeBrain
 from src.ai_core.quantitative_brain import QuantitativeBrain
 from src.data_collection.financials import fetch_financials_dataframe
 from src.utils.financial_ratios import calculate_all_ratios
+from src.utils.peer_discovery import get_peers
+from src.ai_core.macro_brain import MacroBrain
 
 # --- Page Config ---
 st.set_page_config(
@@ -260,8 +262,9 @@ def init_brains():
         # Initialize the brains
         qual_brain = QualitativeBrain()
         quant_brain = QuantitativeBrain()
+        macro_brain = MacroBrain()
         
-        return qual_brain, quant_brain
+        return qual_brain, quant_brain, macro_brain
         
     except ValueError as e:
         st.error(f"🚫 Configuration Error: {e}")
@@ -277,7 +280,7 @@ def init_brains():
         st.stop()
 
 # --- App State & Initialization ---
-qual_brain, quant_brain = init_brains()
+qual_brain, quant_brain, macro_brain = init_brains()
 # --- Sidebar ---
 with st.sidebar:
     st.header("💡 FinSight AI")
@@ -597,7 +600,7 @@ def generate_ai_summary(content, filename, company):
     
     with st.spinner("🤖 Generating AI summary..."):
         try:
-            qual_brain, _ = init_brains()
+            qual_brain, _, _ = init_brains()
             
             # Truncate content to manageable size for API
             max_content_length = 8000
@@ -665,7 +668,7 @@ def generate_key_insights(content, filename, company):
     
     with st.spinner("💡 Extracting key insights..."):
         try:
-            qual_brain, _ = init_brains()
+            qual_brain, _, _ = init_brains()
             
             # Truncate content
             max_content_length = 8000
@@ -763,9 +766,9 @@ else:
     st.warning("Market data for this company is not available. Please run the scheduler to collect data.")
 
 # --- Tabs ---
-tab_labels = ["📈 Market Analysis", "🤖 AI Analyst Chat", "📰 News Analysis", "💡 Deep Dive"]
-selected_tab = st.tabs(tab_labels)
-tab_market, tab_chat, tab_news, tab_deep = selected_tab[0], selected_tab[1], selected_tab[2], selected_tab[3]
+tab_labels = ["📈 Market Analysis", "🤖 AI Analyst Chat", "📰 News Analysis", "💡 Deep Dive", "👥 Agents"]
+tab_market, tab_chat, tab_news, tab_deep, tab_agents = st.tabs(tab_labels)
+
 
 st.markdown("---")
 st.markdown(f"""
@@ -973,24 +976,64 @@ with tab_deep:
     else:
         st.info("📊 Not enough data available to generate a deep dive analysis.")
 
+with tab_agents:
+    st.header("👥 Agents")
+    st.markdown("*Specialized AI agents for advanced analysis.*")
+
+    agent_tabs = st.tabs(["Peer Performance Agent", "Market Pulse Agent"])
+
+    with agent_tabs[0]:
+        st.subheader("📊 Peer Performance Analysis")
+        peers = get_peers(selected_company)
+        if not peers:
+            st.info(f"No peers defined for {selected_company}.")
+        else:
+            st.markdown(f"**Comparing {selected_company} with its peers: {', '.join(peers)}**")
+
+            # Peer financial ratios
+            st.markdown("#### Financial Ratios Comparison")
+            peer_ratios = quant_brain.get_peer_comparison(selected_company, peers)
+            if not peer_ratios.empty:
+                st.dataframe(peer_ratios.style.format("{:.2f}"))
+            else:
+                st.warning("Could not fetch financial data for peer comparison.")
+
+            # Peer stock performance
+            st.markdown("#### Stock Performance Comparison (Last Year)")
+            all_market_data = {selected_company: market_data}
+            for peer in peers:
+                peer_market_data, _, _ = load_company_data(peer)
+                if not peer_market_data.empty:
+                    all_market_data[peer] = peer_market_data
+
+            if len(all_market_data) > 1:
+                fig = go.Figure()
+                for ticker, df in all_market_data.items():
+                    df_last_year = df[df['Date'] > (df['Date'].max() - pd.Timedelta(days=365))]
+                    fig.add_trace(go.Scatter(x=df_last_year['Date'], y=df_last_year['Close'], mode='lines', name=ticker))
+                fig.update_layout(title="Peer Stock Performance", template="plotly_dark")
+                st.plotly_chart(fig, use_container_width=True)
+
+    with agent_tabs[1]:
+        st.subheader("🌍 Market Pulse Analysis")
+        st.markdown("*Analyzing the impact of macroeconomic trends.*")
+
+        if not market_data.empty:
+            corr_df = macro_brain.get_correlation_analysis(market_data.copy())
+            if not corr_df.empty:
+                st.markdown(f"#### Correlation of {selected_company} with Macro Indicators")
+                st.dataframe(corr_df.style.format("{:.2f}"))
+
+                st.markdown("#### Key Macro Indicators")
+                for indicator, data in macro_brain.macro_data.items():
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=data.index, y=data['Close'], mode='lines', name=indicator))
+                    fig.update_layout(title=indicator.replace("_", " ").title(), template="plotly_dark")
+                    st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.warning("Could not perform correlation analysis.")
+        else:
+            st.info("Market data needed for Market Pulse analysis.")
+
+
 # --- Footer ---
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
