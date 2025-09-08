@@ -10,6 +10,8 @@ yfinance
 sec-edgar-downloader
 requests
 newsapi-python
+fredapi
+
 # Technical Analysis library for market data
 ta
 
@@ -52,4 +54,5 @@ huggingface_hub
 pysqlite3-binary==0.5.2.post2
 
 datasets
+
 
