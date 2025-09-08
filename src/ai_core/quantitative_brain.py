@@ -8,7 +8,9 @@ import logging
 from src.models.pca_health_scorer import PCAHealthScorer
 from src.features.build_features import prepare_features_for_prediction
 from src.utils.financial_ratios import calculate_all_ratios
-from src.utils.config import HF_REPO_ID, MODEL_SAVE_PATH as MODELS_PATH
+from src.utils.config import HF_REPO_ID, MODEL_SAVE_PATH as MODELS_PATH, PROCESSED_DATA_PATH
+from src.utils.peer_discovery import get_peers
+
 
 import streamlit as st
 from huggingface_hub import hf_hub_download
@@ -77,3 +79,25 @@ class QuantitativeBrain:
                 'news_sentiment': news_sentiment
 
             }
+
+    def get_peer_comparison(self, main_ticker: str, peers: list[str]) -> pd.DataFrame:
+        """
+        Gathers and compares financial ratios for a company and its peers.
+        """
+        all_ratios = {}
+        tickers_to_process = [main_ticker] + peers
+
+        for ticker in tickers_to_process:
+            fin_path = os.path.join(PROCESSED_DATA_PATH, ticker, f'{ticker}_financials_quarterly.csv')
+            if os.path.exists(fin_path):
+                financials_df = pd.read_csv(fin_path)
+                ratios_df, _ = calculate_all_ratios(financials_df)
+                if not ratios_df.empty:
+                    latest_ratios = ratios_df.drop(columns=['Date']).iloc[-1]
+                    all_ratios[ticker] = latest_ratios
+
+        if not all_ratios:
+            return pd.DataFrame()
+
+        comparison_df = pd.DataFrame(all_ratios)
+        return comparison_df.T # Transpose to have tickers as rows
